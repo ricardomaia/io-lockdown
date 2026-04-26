@@ -1,17 +1,31 @@
+using System;
+using System.Linq;
+using System.ServiceProcess;
+using System.Windows.Forms;
+
 namespace io_lockdown
 {
     internal static class Program
     {
-        /// <summary>
-        ///  The main entry point for the application.
-        /// </summary>
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
-            // To customize application configuration such as set high DPI settings or default font,
-            // see https://aka.ms/applicationconfiguration.
-            ApplicationConfiguration.Initialize();
-            Application.Run(new Form1());
+            if (args.Contains("--service"))
+            {
+                // Roda como serviço do Windows
+                ServiceBase[] ServicesToRun;
+                ServicesToRun = new ServiceBase[]
+                {
+                    new LockdownService()
+                };
+                ServiceBase.Run(ServicesToRun);
+            }
+            else
+            {
+                // Roda como aplicação Windows Forms normal
+                ApplicationConfiguration.Initialize();
+                Application.Run(new Form1());
+            }
         }
     }
 }

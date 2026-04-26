@@ -1,16 +1,19 @@
-using System.Management;
 using System;
-using System.Management.Automation;
+using System.Drawing;
+using System.Windows.Forms;
 using Microsoft.Win32;
-using System.Resources;
-using io_lockdown.Properties;
 
 namespace io_lockdown
 {
     public partial class Form1 : Form
     {
+        private NotifyIcon? trayIcon;
+        private LockdownEngine _engine = new LockdownEngine();
+        private bool _isLocked = false;
 
-        private NotifyIcon trayIcon;
+        private const int WM_DEVICECHANGE = 0x0219;
+        private const int DBT_DEVICEARRIVAL = 0x8000;
+        private const int DBT_DEVICEREMOVECOMPLETE = 0x8004;
 
         public Form1()
         {
@@ -20,73 +23,54 @@ namespace io_lockdown
         private void Form1_Load(object sender, EventArgs e)
         {
             SystemEvents.SessionSwitch += new SessionSwitchEventHandler(SystemEvents_SessionSwitch);
-            // Initialize Tray Icon
+            
             trayIcon = new NotifyIcon();
+            trayIcon.Icon = SystemIcons.Shield;
+            trayIcon.Text = "I/O Lockdown Ativo";
             trayIcon.Visible = true;
+            
+            _engine.Log("Interface de usuário iniciada.");
         }
 
-        private void Form1_Closed(object sender, EventArgs e)
+        protected override void WndProc(ref Message m)
         {
-            Microsoft.Win32.SystemEvents.SessionSwitch -= new SessionSwitchEventHandler(SystemEvents_SessionSwitch);
-            // Hide tray icon, otherwise it will remain shown until user mouses over it
-            trayIcon.Visible = false;
-        }
+            base.WndProc(ref m);
 
-        private void button1_Click(object sender, EventArgs e)
-        {
-
-
-            SelectQuery wmiQuery = new SelectQuery("SELECT * FROM Win32_NetworkAdapter WHERE NetConnectionId != NULL");
-            ManagementObjectSearcher searchProcedure = new ManagementObjectSearcher(wmiQuery);
-            foreach (ManagementObject item in searchProcedure.Get())
+            if (_isLocked && m.Msg == WM_DEVICECHANGE)
             {
-                item.InvokeMethod("Disable", null);
-                MessageBox.Show((string)item["NetConnectionId"] + " disabled");
-
+                int eventType = m.WParam.ToInt32();
+                if (eventType == DBT_DEVICEARRIVAL || eventType == DBT_DEVICEREMOVECOMPLETE)
+                {
+                    _engine.TriggerViolation("Mudança de hardware detectada via Interface.");
+                }
             }
-
-
-        }
-
-        private void button2_Click(object sender, EventArgs e)
-        {
-            SelectQuery wmiQuery = new SelectQuery("SELECT * FROM Win32_NetworkAdapter WHERE NetConnectionId != NULL");
-            ManagementObjectSearcher searchProcedure = new ManagementObjectSearcher(wmiQuery);
-            foreach (ManagementObject item in searchProcedure.Get())
-            {                
-                item.InvokeMethod("Enable", null);
-                MessageBox.Show((string)item["NetConnectionId"] + " enabled");
-
-            }
-
-        }
-
-        private void button3_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void timer1_Tick(object sender, EventArgs e)
-        {
-            MessageBox.Show("Test");
         }
 
         void SystemEvents_SessionSwitch(object sender, SessionSwitchEventArgs e)
         {
-            string time = DateTime.Now.ToString("h:mm:ss tt");
+            _engine.Log($"Evento de sessão (UI): {e.Reason}");
             switch (e.Reason)
-            {                
-                case SessionSwitchReason.SessionLogon:                    
-                case SessionSwitchReason.SessionUnlock:
-                    // Desativa interfaces de rede, portas USB (exceto a do teclado), firewire e Bluetooth
-                    MessageBox.Show("Unlock " + time);
+            {
+                case SessionSwitchReason.SessionLock:
+                    _isLocked = true;
+                    _engine.CaptureKeyboardWhitelist();
+                    _engine.SetNetworkState(false);
+                    _engine.SetUsbStorageState(false);
                     break;
-                case SessionSwitchReason.SessionLock:                    
-                case SessionSwitchReason.SessionLogoff:
-                    MessageBox.Show("Lock " + time);
+
+                case SessionSwitchReason.SessionUnlock:
+                    _isLocked = false;
+                    if (!_engine.ViolationDetected)
+                    {
+                        _engine.SetUsbStorageState(true);
+                        _engine.SetNetworkState(true);
+                    }
+                    else
+                    {
+                        MessageBox.Show("ALERTA: Violação detectada. Hardware bloqueado.", "Segurança", MessageBoxButtons.OK, MessageBoxIcon.Stop);
+                    }
                     break;
             }
         }
-
     }
 }
