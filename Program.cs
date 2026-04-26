@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.ServiceProcess;
 using System.Windows.Forms;
+using System.Diagnostics;
 
 namespace io_lockdown
 {
@@ -12,17 +13,21 @@ namespace io_lockdown
         {
             if (args.Contains("--service"))
             {
-                // Roda como serviço do Windows
-                ServiceBase[] ServicesToRun;
-                ServicesToRun = new ServiceBase[]
-                {
-                    new LockdownService()
-                };
+                ServiceBase[] ServicesToRun = new ServiceBase[] { new LockdownService() };
                 ServiceBase.Run(ServicesToRun);
             }
             else
             {
-                // Roda como aplicação Windows Forms normal
+                // Verifica se já existe OUTRA instância da UI (ignorando o serviço)
+                Process current = Process.GetCurrentProcess();
+                bool isAnotherUI = Process.GetProcessesByName(current.ProcessName)
+                    .Any(p => p.Id != current.Id && p.SessionId != 0);
+
+                if (isAnotherUI)
+                {
+                    return; // Já existe uma interface rodando nesta sessão de usuário
+                }
+
                 ApplicationConfiguration.Initialize();
                 Application.Run(new Form1());
             }

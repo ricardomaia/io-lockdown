@@ -30,7 +30,7 @@ namespace io_lockdown
             switch (changeDescription.Reason)
             {
                 case SessionChangeReason.SessionLock:
-                    _engine.CaptureKeyboardWhitelist();
+                    _engine.CaptureHardwareWhitelist();
                     _engine.SetNetworkState(false);
                     _engine.SetUsbStorageState(false);
                     break;

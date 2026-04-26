@@ -11,16 +11,12 @@ if (!(Test-Path $WIX_EXE)) {
     exit
 }
 
-# Remove extensões globais que podem causar conflito de versão
-# & $WIX_EXE extension remove WixToolset.UI.wixext --global 2>$null
-
-# Tenta baixar a extensão compatível com v5 para o projeto local
-# No WiX v5, as extensões podem ser baixadas via NuGet automaticamente no comando build se configurado,
-# mas vamos tentar adicionar manualmente a versão correta.
+# Adiciona as extensões necessárias
 & $WIX_EXE extension add WixToolset.UI.wixext/5.0.2 --global
+& $WIX_EXE extension add WixToolset.Util.wixext/5.0.2 --global
 
-# Compila e gera o MSI
-& $WIX_EXE build Package.wxs -ext WixToolset.UI.wixext -o "IOLockdown_Installer.msi"
+# Compila e gera o MSI com ambas as extensões
+& $WIX_EXE build Package.wxs -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext -o "IOLockdown_Installer.msi"
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "`nSucesso! Arquivo 'IOLockdown_Installer.msi' gerado." -ForegroundColor Green
