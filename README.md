@@ -1,6 +1,6 @@
 # I/O Lockdown
 
-[![Build and Package](https://github.com/ricardomaia/io-lockdown/actions/workflows/build.yml/badge.svg)](https://github.com/ricardomaia/io-lockdown/actions/workflows/build.yml)
+[![Deploy GitHub Pages](https://github.com/ricardomaia/io-lockdown/actions/workflows/pages.yml/badge.svg)](https://github.com/ricardomaia/io-lockdown/actions/workflows/pages.yml)
 
 I/O Lockdown is a Windows endpoint security tool designed to protect workstations from physical peripheral attacks and data exfiltration while the system is locked or unattended.
 
