@@ -17,6 +17,7 @@ namespace io_lockdown
 
         private void InitializeComponent()
         {
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
             this.rtbLogs = new System.Windows.Forms.RichTextBox();
             this.lblStatus = new System.Windows.Forms.Label();
             this.SuspendLayout();
@@ -49,6 +50,7 @@ namespace io_lockdown
             this.ClientSize = new System.Drawing.Size(584, 361);
             this.Controls.Add(this.lblStatus);
             this.Controls.Add(this.rtbLogs);
+            this.Icon = ((System.Drawing.Icon)(resources.GetObject("Icon1")));
             this.Name = "Form1";
             this.Text = "I/O Lockdown - Console de Auditoria";
             this.Load += new System.EventHandler(this.Form1_Load);

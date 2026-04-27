@@ -1,19 +1,19 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui" xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
-  <!-- Incrementamos a versão para garantir o upgrade -->
+  <!-- Incrementamos para 1.0.2.1 para novo teste de upgrade -->
   <Package Name="I/O Lockdown" 
            Manufacturer="Ricardo Maia" 
-           Version="1.0.1.0" 
+           Version="1.0.2.3" 
            UpgradeCode="73a1e9c2-5b12-4e92-910f-226cd97ff4f1"
            Scope="perMachine">
     
-    <!-- Configuração de Upgrade: Remove a versão antiga antes de instalar a nova -->
     <MajorUpgrade DowngradeErrorMessage="Uma versão mais recente do I/O Lockdown já está instalada." 
                   Schedule="afterInstallInitialize" />
 
     <MediaTemplate EmbedCab="yes" />
 
-    <Icon Id="AppIcon" SourceFile="publish\io-lockdown.exe" />
-    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <!-- Definição do Ícone -->
+    <Icon Id="AppIcon.exe" SourceFile="Resources\app_icon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.exe" />
 
     <util:CloseApplication Id="CloseApp" Target="io-lockdown.exe" CloseMessage="yes" RebootPrompt="no" />
 
@@ -27,15 +27,16 @@
 
     <ComponentGroup Id="AppComponents" Directory="INSTALLFOLDER">
       <Component Id="MainExecutable" Guid="a1b2c3d4-e5f6-4789-a1b2-c3d4e5f60789">
-        <File Id="AppExe" Source="publish\io-lockdown.exe" KeyPath="yes" />
-        
-        <Shortcut Id="ApplicationStartMenuShortcut" 
-                  Directory="ApplicationProgramsFolder"
-                  Name="IO Lockdown" 
-                  Description="Interface de Segurança I/O Lockdown"
-                  WorkingDirectory="INSTALLFOLDER"
-                  Icon="AppIcon"
-                  Advertise="yes" />
+        <File Id="AppExe" Source="publish\io-lockdown.exe" KeyPath="yes">
+            <!-- Atalho comum (não anunciado) com ícone explícito -->
+            <Shortcut Id="ApplicationStartMenuShortcut" 
+                      Directory="ApplicationProgramsFolder"
+                      Name="IO Lockdown" 
+                      Description="Interface de Segurança I/O Lockdown"
+                      WorkingDirectory="INSTALLFOLDER"
+                      Icon="AppIcon.exe"
+                      IconIndex="0" />
+        </File>
 
         <ServiceInstall Id="ServiceInstaller"
                         Type="ownProcess"
@@ -63,7 +64,6 @@
     <CustomAction Id="LaunchApp" FileRef="AppExe" ExeCommand="" Return="asyncNoWait" />
     
     <InstallExecuteSequence>
-      <!-- Só inicia o app se for uma nova instalação ou upgrade (não no uninstall) -->
       <Custom Action="LaunchApp" After="InstallFinalize" Condition="NOT Installed OR UPGRADINGPRODUCTCODE" />
     </InstallExecuteSequence>
 

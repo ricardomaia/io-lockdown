@@ -46,7 +46,12 @@ namespace io_lockdown
                 DebugLog("Menu de contexto criado.");
 
                 trayIcon = new NotifyIcon();
-                trayIcon.Icon = this.Icon;
+                // Extrai o ícone associado ao arquivo .exe para garantir sincronia com o Explorer
+                try {
+                    trayIcon.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+                } catch {
+                    trayIcon.Icon = this.Icon; // Fallback para o ícone do Form
+                }
                 trayIcon.Text = "I/O Lockdown";
                 trayIcon.ContextMenuStrip = menu;
                 trayIcon.Visible = true;
