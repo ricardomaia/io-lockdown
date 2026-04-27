@@ -4,6 +4,7 @@ using System.Windows.Forms;
 using Microsoft.Win32;
 using System.IO;
 using System.Management;
+using System.Threading.Tasks;
 
 namespace io_lockdown
 {
@@ -22,7 +23,6 @@ namespace io_lockdown
         {
             InitializeComponent();
             
-            // Força o carregamento do ícone personalizado no formulário
             try {
                 this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             } catch { }
@@ -131,30 +131,30 @@ namespace io_lockdown
                 MessageBox.Show("Por favor, selecione um dispositivo Bluetooth na lista.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-string selectedItem = cmbBluetoothDevices.SelectedItem?.ToString() ?? "";
 
-if (string.IsNullOrEmpty(selectedItem) || selectedItem.Contains("(Desconectado)"))
-{
-    MessageBox.Show("Por favor, selecione um dispositivo Bluetooth conectado.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-    return;
-}
+            string selectedItem = cmbBluetoothDevices.SelectedItem?.ToString() ?? "";
+            
+            if (string.IsNullOrEmpty(selectedItem) || selectedItem.Contains("(Desconectado)"))
+            {
+                MessageBox.Show("Por favor, selecione um dispositivo Bluetooth conectado.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
 
-// Extrai o endereço MAC entre os colchetes [ ]
-string targetAddress = "";
-int start = selectedItem.LastIndexOf("[");
-int end = selectedItem.LastIndexOf("]");
-if (start >= 0 && end > start)
-{
-    targetAddress = selectedItem.Substring(start + 1, end - start - 1);
-}
+            string targetAddress = "";
+            int start = selectedItem.LastIndexOf("[");
+            int end = selectedItem.LastIndexOf("]");
+            if (start >= 0 && end > start)
+            {
+                targetAddress = selectedItem.Substring(start + 1, end - start - 1);
+            }
 
-if (string.IsNullOrEmpty(targetAddress))
-{
-    MessageBox.Show("Não foi possível identificar o endereço do dispositivo.", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
-    return;
-}
+            if (string.IsNullOrEmpty(targetAddress))
+            {
+                MessageBox.Show("Não foi possível identificar o endereço do dispositivo.", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
 
-_engine.StartBluetoothMonitor(targetAddress);
+            _engine.StartBluetoothMonitor(targetAddress);
             
             btnSaveBluetooth.Enabled = false;
             btnRefreshBluetooth.Enabled = false;
@@ -211,8 +211,8 @@ _engine.StartBluetoothMonitor(targetAddress);
                 
                 if (eventType == DBT_DEVICEARRIVAL)
                 {
-                    // Monitoramento Global em tempo real
-                    CheckNewHardwareIntegrity();
+                    // Movemos a checagem para uma thread de background para evitar erro de Cast/STA no WndProc
+                    Task.Run(() => CheckNewHardwareIntegrity());
                 }
 
                 if (_isLocked && (eventType == DBT_DEVICEARRIVAL || eventType == DBT_DEVICEREMOVECOMPLETE))
@@ -226,17 +226,23 @@ _engine.StartBluetoothMonitor(targetAddress);
         {
             try
             {
-                using (var searcher = new ManagementObjectSearcher(new SelectQuery("SELECT PNPDeviceID FROM Win32_PnPEntity WHERE Present = True")))
+                using (var searcher = new ManagementObjectSearcher("SELECT PNPDeviceID FROM Win32_PnPEntity WHERE Present = True"))
+                using (var collection = searcher.Get())
                 {
-                    foreach (ManagementObject device in searcher.Get())
+                    foreach (ManagementBaseObject device in collection)
                     {
-                        string id = device["PNPDeviceID"]?.ToString() ?? "";
-                        if (!string.IsNullOrEmpty(id) && !_engine.IsDeviceAuthorized(id))
+                        try
                         {
-                            _engine.Log($"DISPOSITIVO NÃO AUTORIZADO DETECTADO: {id}");
-                            _ = _engine.TriggerViolation($"Novo hardware não autorizado: {id}");
-                            LockdownEngine.LockWorkStation(); // Bloqueia a tela imediatamente
+                            object? val = device.GetPropertyValue("PNPDeviceID");
+                            string id = val?.ToString() ?? "";
+                            if (!string.IsNullOrEmpty(id) && !_engine.IsDeviceAuthorized(id))
+                            {
+                                _engine.Log($"DISPOSITIVO NÃO AUTORIZADO DETECTADO: {id}");
+                                _ = _engine.TriggerViolation($"Novo hardware não autorizado: {id}");
+                                LockdownEngine.LockWorkStation();
+                            }
                         }
+                        catch { }
                     }
                 }
             }

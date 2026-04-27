@@ -5,6 +5,7 @@ namespace io_lockdown
         private System.ComponentModel.IContainer components = null;
         private System.Windows.Forms.RichTextBox rtbLogs;
         private System.Windows.Forms.Label lblStatus;
+        private System.Windows.Forms.Label lblVersion;
         private System.Windows.Forms.GroupBox grpBluetooth;
         private System.Windows.Forms.ComboBox cmbBluetoothDevices;
         private System.Windows.Forms.Button btnSaveBluetooth;
@@ -27,6 +28,7 @@ namespace io_lockdown
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
             this.rtbLogs = new System.Windows.Forms.RichTextBox();
             this.lblStatus = new System.Windows.Forms.Label();
+            this.lblVersion = new System.Windows.Forms.Label();
             this.grpBluetooth = new System.Windows.Forms.GroupBox();
             this.btnRefreshBluetooth = new System.Windows.Forms.Button();
             this.lblBtInfo = new System.Windows.Forms.Label();
@@ -58,6 +60,17 @@ namespace io_lockdown
             this.lblStatus.Size = new System.Drawing.Size(210, 21);
             this.lblStatus.TabIndex = 1;
             this.lblStatus.Text = "Status: Proteção Ativada";
+            // 
+            // lblVersion
+            // 
+            this.lblVersion.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.lblVersion.AutoSize = true;
+            this.lblVersion.ForeColor = System.Drawing.Color.Gray;
+            this.lblVersion.Location = new System.Drawing.Point(720, 14);
+            this.lblVersion.Name = "lblVersion";
+            this.lblVersion.Size = new System.Drawing.Size(43, 15);
+            this.lblVersion.TabIndex = 4;
+            this.lblVersion.Text = "v1.1.5";
             // 
             // grpBluetooth
             // 
@@ -134,6 +147,7 @@ namespace io_lockdown
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(784, 461);
+            this.Controls.Add(this.lblVersion);
             this.Controls.Add(this.grpWhitelist);
             this.Controls.Add(this.grpBluetooth);
             this.Controls.Add(this.lblStatus);

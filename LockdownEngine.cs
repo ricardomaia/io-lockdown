@@ -33,12 +33,13 @@ namespace io_lockdown
         {
             try {
                 if (!Directory.Exists(_violationDir)) Directory.CreateDirectory(_violationDir);
-                CaptureHardwareWhitelist(); // Captura base inicial de confiança
+                CaptureHardwareWhitelist(); 
             } catch { }
         }
 
         public bool IsDeviceAuthorized(string pnpDeviceId)
         {
+            if (string.IsNullOrEmpty(pnpDeviceId)) return true;
             return _trustedDeviceIds.Contains(pnpDeviceId);
         }
 
@@ -87,13 +88,17 @@ namespace io_lockdown
             _trustedDeviceIds.Clear();
             try
             {
-                // Captura TODOS os dispositivos PnP atualmente presentes no sistema
-                using (var searcher = new ManagementObjectSearcher(new SelectQuery("SELECT PNPDeviceID FROM Win32_PnPEntity WHERE Present = True")))
+                using (var searcher = new ManagementObjectSearcher("SELECT PNPDeviceID FROM Win32_PnPEntity WHERE Present = True"))
+                using (var collection = searcher.Get())
                 {
-                    foreach (ManagementObject device in searcher.Get())
+                    foreach (ManagementBaseObject device in collection)
                     {
-                        string id = device["PNPDeviceID"]?.ToString() ?? "";
-                        if (!string.IsNullOrEmpty(id)) _trustedDeviceIds.Add(id);
+                        try 
+                        {
+                            object? val = device.GetPropertyValue("PNPDeviceID");
+                            if (val != null) _trustedDeviceIds.Add(val.ToString() ?? "");
+                        }
+                        catch { }
                     }
                 }
                 Log($"Whitelist Global: {_trustedDeviceIds.Count} dispositivos monitorados.");
@@ -113,7 +118,6 @@ namespace io_lockdown
                     if (!string.IsNullOrEmpty(d.DeviceName))
                     {
                         string status = d.Connected ? "Conectado" : "Desconectado";
-                        // Incluímos o endereço no final para identificação única
                         deviceNames.Add($"{d.DeviceName} ({status}) [{d.DeviceAddress}]");
                     }
                 }
@@ -137,7 +141,6 @@ namespace io_lockdown
                     {
                         bool isActuallyConnected = false;
                         try {
-                            // Verificamos todos os dispositivos pareados e checamos o status de conexão do endereço específico
                             var devices = client.PairedDevices;
                             foreach (var d in devices) {
                                 if (d.DeviceAddress.ToString() == targetAddress) {
@@ -177,11 +180,12 @@ namespace io_lockdown
             try
             {
                 string methodName = enable ? "Enable" : "Disable";
-                using (var searcher = new ManagementObjectSearcher(new SelectQuery("SELECT * FROM Win32_NetworkAdapter WHERE NetConnectionId != NULL")))
+                using (var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_NetworkAdapter WHERE NetConnectionId != NULL"))
+                using (var collection = searcher.Get())
                 {
-                    foreach (ManagementObject item in searcher.Get())
+                    foreach (ManagementObject item in collection)
                     {
-                        item.InvokeMethod(methodName, null);
+                        try { item.InvokeMethod(methodName, null); } catch { }
                     }
                 }
                 Log($"Rede: {methodName}");
