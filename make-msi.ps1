@@ -11,12 +11,12 @@ if (!(Test-Path $WIX_EXE)) {
     exit
 }
 
-# Adiciona as extensões necessárias
-& $WIX_EXE extension add WixToolset.UI.wixext/5.0.2 --global
-& $WIX_EXE extension add WixToolset.Util.wixext/5.0.2 --global
+# Adiciona as extensões necessárias (Aceitando a EULA wix7 conforme exigido)
+& $WIX_EXE extension add WixToolset.UI.wixext/5.0.2 --global -acceptEula wix7
+& $WIX_EXE extension add WixToolset.Util.wixext/5.0.2 --global -acceptEula wix7
 
 # Compila e gera o MSI com ambas as extensões
-& $WIX_EXE build Package.wxs -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext -o "IOLockdown_Installer.msi"
+& $WIX_EXE build Package.wxs -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext -o "IOLockdown_Installer.msi" -acceptEula wix7
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "`nSucesso! Arquivo 'IOLockdown_Installer.msi' gerado." -ForegroundColor Green

@@ -43,12 +43,12 @@ jobs:
 
     - name: Add WiX Extensions
       run: |
-        wix extension add WixToolset.UI.wixext/5.0.2 --global
-        wix extension add WixToolset.Util.wixext/5.0.2 --global
+        wix extension add WixToolset.UI.wixext/5.0.2 --global -acceptEula wix7
+        wix extension add WixToolset.Util.wixext/5.0.2 --global -acceptEula wix7
 
     - name: Build MSI
       run: |
-        wix build Package.wxs -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext -o "IOLockdown_Installer.msi"
+        wix build Package.wxs -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext -o "IOLockdown_Installer.msi" -acceptEula wix7
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4

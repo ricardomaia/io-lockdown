@@ -2,7 +2,7 @@
   <!-- Incrementamos para 1.0.2.1 para novo teste de upgrade -->
   <Package Name="I/O Lockdown" 
            Manufacturer="Ricardo Maia" 
-           Version="1.1.6" 
+           Version="1.1.7" 
            UpgradeCode="73a1e9c2-5b12-4e92-910f-226cd97ff4f1"
            Scope="perMachine">
     
