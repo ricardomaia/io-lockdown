@@ -18,6 +18,7 @@ namespace io_lockdown
     {
         private List<string> _trustedDeviceIds = new List<string>();
         private bool _violationDetected = false;
+        private bool _isLocked = false;
         private string _logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "lockdown.log");
         private string _violationDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "violations");
 
@@ -25,6 +26,8 @@ namespace io_lockdown
         public static extern bool LockWorkStation();
 
         public bool ViolationDetected => _violationDetected;
+        public List<string> TrustedDeviceIds => _trustedDeviceIds;
+        public bool IsLocked { get => _isLocked; set => _isLocked = value; }
 
         public LockdownEngine()
         {
@@ -95,31 +98,69 @@ namespace io_lockdown
             catch (Exception ex) { Log("Erro Whitelist: " + ex.Message); }
         }
 
-        public void StartBluetoothMonitor(string targetDeviceName)
+        public List<string> GetPairedBluetoothDevices()
         {
-            if (string.IsNullOrEmpty(targetDeviceName) || targetDeviceName == "Meu Celular") return;
+            var deviceNames = new List<string>();
+            try
+            {
+                var client = new BluetoothClient();
+                var devices = client.PairedDevices; 
+                foreach (var d in devices)
+                {
+                    if (!string.IsNullOrEmpty(d.DeviceName))
+                    {
+                        string status = d.Connected ? "Conectado" : "Desconectado";
+                        // Incluímos o endereço no final para identificação única
+                        deviceNames.Add($"{d.DeviceName} ({status}) [{d.DeviceAddress}]");
+                    }
+                }
+            }
+            catch (Exception ex) { Log("Erro ao listar Bluetooth: " + ex.Message); }
+            return deviceNames;
+        }
+
+        public void StartBluetoothMonitor(string targetAddress)
+        {
+            if (string.IsNullOrEmpty(targetAddress)) return;
 
             Task.Run(async () => {
                 var client = new BluetoothClient();
-                Log($"Monitor Bluetooth iniciado para: {targetDeviceName}");
+                Log($"Monitor Bluetooth iniciado para endereço: {targetAddress}.");
+                int failureCount = 0;
                 
                 while (true)
                 {
-                    bool found = false;
-                    try {
-                        // Na v4, usamos DiscoverDevices()
-                        var devices = client.DiscoverDevices();
-                        foreach (var d in devices) {
-                            if (d.DeviceName.Contains(targetDeviceName)) {
-                                found = true;
-                                break;
+                    if (!_isLocked)
+                    {
+                        bool isActuallyConnected = false;
+                        try {
+                            // Verificamos todos os dispositivos pareados e checamos o status de conexão do endereço específico
+                            var devices = client.PairedDevices;
+                            foreach (var d in devices) {
+                                if (d.DeviceAddress.ToString() == targetAddress) {
+                                    isActuallyConnected = d.Connected;
+                                    break;
+                                }
                             }
-                        }
-                    } catch { }
+                        } catch { }
 
-                    if (!found) {
-                        Log("Dispositivo Bluetooth ausente! Bloqueando...");
-                        LockWorkStation();
+                        if (!isActuallyConnected) {
+                            failureCount++;
+                            Log($"Conexão Bluetooth ausente ({failureCount}/3).");
+                            
+                            if (failureCount >= 3) {
+                                Log("Dispositivo Bluetooth desconectado. Bloqueando tela...");
+                                LockWorkStation();
+                                failureCount = 0; 
+                            }
+                        } else {
+                            if (failureCount > 0) Log("Dispositivo Bluetooth verificado como conectado.");
+                            failureCount = 0;
+                        }
+                    }
+                    else
+                    {
+                        failureCount = 0; 
                     }
                     
                     await Task.Delay(15000); 

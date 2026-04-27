@@ -58,14 +58,8 @@ namespace io_lockdown
                 trayIcon.MouseClick += (s, ev) => { if (ev.Button == MouseButtons.Left) ShowConsole(); };
                 DebugLog("NotifyIcon configurado.");
 
-                // Testamos iniciar o monitor Bluetooth com try-catch isolado
-                try {
-                    DebugLog("Tentando iniciar Bluetooth Monitor...");
-                    _engine.StartBluetoothMonitor("Meu Celular");
-                    DebugLog("Bluetooth Monitor iniciado.");
-                } catch (Exception exBT) {
-                    DebugLog($"AVISO: Erro ao iniciar Bluetooth: {exBT.Message}");
-                }
+                UpdateWhitelistUI();
+                RefreshBluetoothList();
 
                 _engine.Log("Interface de usuário carregada com sucesso.");
                 DebugLog("Load finalizado.");
@@ -74,6 +68,96 @@ namespace io_lockdown
             {
                 DebugLog($"ERRO FATAL NO LOAD: {ex.Message}\n{ex.StackTrace}");
             }
+        }
+
+        private void RefreshBluetoothList()
+        {
+            try
+            {
+                cmbBluetoothDevices.Items.Clear();
+                var devices = _engine.GetPairedBluetoothDevices();
+                if (devices.Count == 0)
+                {
+                    _engine.Log("Nenhum dispositivo Bluetooth pareado encontrado.");
+                    return;
+                }
+
+                foreach (var name in devices)
+                {
+                    cmbBluetoothDevices.Items.Add(name);
+                }
+
+                if (cmbBluetoothDevices.Items.Count > 0)
+                    cmbBluetoothDevices.SelectedIndex = 0;
+            }
+            catch (Exception ex) { _engine.Log("Erro ao atualizar lista Bluetooth: " + ex.Message); }
+        }
+
+        private void btnRefreshBluetooth_Click(object sender, EventArgs e)
+        {
+            RefreshBluetoothList();
+        }
+
+        private void UpdateWhitelistUI()
+        {
+            if (this.InvokeRequired)
+            {
+                this.Invoke(new Action(UpdateWhitelistUI));
+                return;
+            }
+
+            try
+            {
+                _engine.CaptureHardwareWhitelist();
+                lstWhitelist.Items.Clear();
+                foreach (var id in _engine.TrustedDeviceIds)
+                {
+                    lstWhitelist.Items.Add(id);
+                }
+            }
+            catch (Exception ex) { _engine.Log("Erro ao atualizar UI da Whitelist: " + ex.Message); }
+        }
+
+        private void btnSaveBluetooth_Click(object sender, EventArgs e)
+        {
+            if (cmbBluetoothDevices.SelectedItem == null)
+            {
+                MessageBox.Show("Por favor, selecione um dispositivo Bluetooth na lista.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            string selectedItem = cmbBluetoothDevices.SelectedItem.ToString() ?? "";
+            
+            if (selectedItem.Contains("(Desconectado)"))
+            {
+                MessageBox.Show("Não é possível monitorar um dispositivo desconectado. Certifique-se de que ele está ligado e conectado ao Windows.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            // Extrai o endereço MAC entre os colchetes [ ]
+            string targetAddress = "";
+            int start = selectedItem.LastIndexOf("[");
+            int end = selectedItem.LastIndexOf("]");
+            if (start >= 0 && end > start)
+            {
+                targetAddress = selectedItem.Substring(start + 1, end - start - 1);
+            }
+
+            if (string.IsNullOrEmpty(targetAddress))
+            {
+                MessageBox.Show("Não foi possível identificar o endereço do dispositivo.", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            _engine.StartBluetoothMonitor(targetAddress);
+            
+            btnSaveBluetooth.Enabled = false;
+            btnRefreshBluetooth.Enabled = false;
+            cmbBluetoothDevices.Enabled = false;
+            
+            string displayLabel = selectedItem.Substring(0, start).Trim();
+            lblBtInfo.Text = $"Monitorando: {displayLabel}. Para alterar, reinicie o aplicativo.";
+            _engine.Log($"Monitoramento Bluetooth configurado para endereço: {targetAddress}");
         }
 
         private void ShowConsole()
@@ -135,12 +219,14 @@ namespace io_lockdown
             switch (e.Reason) {
                 case SessionSwitchReason.SessionLock:
                     _isLocked = true;
-                    _engine.CaptureHardwareWhitelist();
+                    _engine.IsLocked = true;
+                    UpdateWhitelistUI();
                     _engine.SetNetworkState(false);
                     _engine.SetUsbStorageState(false);
                     break;
                 case SessionSwitchReason.SessionUnlock:
                     _isLocked = false;
+                    _engine.IsLocked = false;
                     if (!_engine.ViolationDetected) {
                         _engine.SetUsbStorageState(true);
                         _engine.SetNetworkState(true);

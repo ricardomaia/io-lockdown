@@ -30,12 +30,14 @@ namespace io_lockdown
             switch (changeDescription.Reason)
             {
                 case SessionChangeReason.SessionLock:
+                    _engine.IsLocked = true;
                     _engine.CaptureHardwareWhitelist();
                     _engine.SetNetworkState(false);
                     _engine.SetUsbStorageState(false);
                     break;
 
                 case SessionChangeReason.SessionUnlock:
+                    _engine.IsLocked = false;
                     if (!_engine.ViolationDetected)
                     {
                         _engine.SetUsbStorageState(true);
