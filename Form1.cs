@@ -46,7 +46,7 @@ namespace io_lockdown
                 DebugLog("Menu de contexto criado.");
 
                 trayIcon = new NotifyIcon();
-                trayIcon.Icon = SystemIcons.Shield;
+                trayIcon.Icon = this.Icon;
                 trayIcon.Text = "I/O Lockdown";
                 trayIcon.ContextMenuStrip = menu;
                 trayIcon.Visible = true;
