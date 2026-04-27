@@ -131,30 +131,30 @@ namespace io_lockdown
                 MessageBox.Show("Por favor, selecione um dispositivo Bluetooth na lista.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
+string selectedItem = cmbBluetoothDevices.SelectedItem?.ToString() ?? "";
 
-            string selectedItem = cmbBluetoothDevices.SelectedItem?.ToString() ?? "";
-            
-            if (selectedItem.Contains("(Desconectado)"))
-            {
-                MessageBox.Show("Não é possível monitorar um dispositivo desconectado. Certifique-se de que ele está ligado e conectado ao Windows.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
+if (string.IsNullOrEmpty(selectedItem) || selectedItem.Contains("(Desconectado)"))
+{
+    MessageBox.Show("Por favor, selecione um dispositivo Bluetooth conectado.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    return;
+}
 
-            string targetAddress = "";
-            int start = selectedItem.LastIndexOf("[");
-            int end = selectedItem.LastIndexOf("]");
-            if (start >= 0 && end > start)
-            {
-                targetAddress = selectedItem.Substring(start + 1, end - start - 1);
-            }
+// Extrai o endereço MAC entre os colchetes [ ]
+string targetAddress = "";
+int start = selectedItem.LastIndexOf("[");
+int end = selectedItem.LastIndexOf("]");
+if (start >= 0 && end > start)
+{
+    targetAddress = selectedItem.Substring(start + 1, end - start - 1);
+}
 
-            if (string.IsNullOrEmpty(targetAddress))
-            {
-                MessageBox.Show("Não foi possível identificar o endereço do dispositivo.", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
+if (string.IsNullOrEmpty(targetAddress))
+{
+    MessageBox.Show("Não foi possível identificar o endereço do dispositivo.", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+    return;
+}
 
-            _engine.StartBluetoothMonitor(targetAddress);
+_engine.StartBluetoothMonitor(targetAddress);
             
             btnSaveBluetooth.Enabled = false;
             btnRefreshBluetooth.Enabled = false;

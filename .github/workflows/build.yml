@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -26,7 +31,9 @@ jobs:
         dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -o ./publish /p:TargetFramework=net9.0-windows10.0.19041.0
 
     - name: Install WiX Toolset
-      run: dotnet tool install --global wix
+      run: |
+        dotnet tool install --global wix
+        echo "C:\Users\runneradmin\.dotnet\tools" >> $env:GITHUB_PATH
 
     - name: Add WiX Extensions
       run: |
@@ -42,3 +49,23 @@ jobs:
       with:
         name: IOLockdown-MSI
         path: IOLockdown_Installer.msi
+
+  deploy-pages:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './docs'
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
