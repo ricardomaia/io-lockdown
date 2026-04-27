@@ -70,7 +70,7 @@ namespace io_lockdown
             this.lblVersion.Name = "lblVersion";
             this.lblVersion.Size = new System.Drawing.Size(43, 15);
             this.lblVersion.TabIndex = 4;
-            this.lblVersion.Text = "v1.1.7";
+            this.lblVersion.Text = "v1.1.8";
             // 
             // grpBluetooth
             // 

@@ -1,10 +1,10 @@
 [Setup]
 AppName=I/O Lockdown
-AppVersion=1.1.7
+AppVersion=1.1.8
 DefaultDirName={pf}\IOLockdown
 DefaultGroupName=I/O Lockdown
 OutputDir=.
-OutputBaseFilename=IOLockdown_Setup_v1.1.7
+OutputBaseFilename=IOLockdown_Setup_v1.1.8
 Compression=lzma
 SolidCompression=yes
 PrivilegesRequired=admin
