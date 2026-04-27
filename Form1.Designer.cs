@@ -6,6 +6,7 @@ namespace io_lockdown
         private System.Windows.Forms.RichTextBox rtbLogs;
         private System.Windows.Forms.Label lblStatus;
         private System.Windows.Forms.Label lblVersion;
+        private System.Windows.Forms.PictureBox picLogo;
         private System.Windows.Forms.GroupBox grpBluetooth;
         private System.Windows.Forms.ComboBox cmbBluetoothDevices;
         private System.Windows.Forms.Button btnSaveBluetooth;
@@ -29,6 +30,7 @@ namespace io_lockdown
             this.rtbLogs = new System.Windows.Forms.RichTextBox();
             this.lblStatus = new System.Windows.Forms.Label();
             this.lblVersion = new System.Windows.Forms.Label();
+            this.picLogo = new System.Windows.Forms.PictureBox();
             this.grpBluetooth = new System.Windows.Forms.GroupBox();
             this.btnRefreshBluetooth = new System.Windows.Forms.Button();
             this.lblBtInfo = new System.Windows.Forms.Label();
@@ -36,6 +38,7 @@ namespace io_lockdown
             this.cmbBluetoothDevices = new System.Windows.Forms.ComboBox();
             this.grpWhitelist = new System.Windows.Forms.GroupBox();
             this.lstWhitelist = new System.Windows.Forms.ListBox();
+            ((System.ComponentModel.ISupportInitialize)(this.picLogo)).BeginInit();
             this.grpBluetooth.SuspendLayout();
             this.grpWhitelist.SuspendLayout();
             this.SuspendLayout();
@@ -55,11 +58,21 @@ namespace io_lockdown
             // 
             this.lblStatus.AutoSize = true;
             this.lblStatus.Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Bold);
-            this.lblStatus.Location = new System.Drawing.Point(12, 9);
+            this.lblStatus.Location = new System.Drawing.Point(50, 9);
             this.lblStatus.Name = "lblStatus";
             this.lblStatus.Size = new System.Drawing.Size(210, 21);
             this.lblStatus.TabIndex = 1;
-            this.lblStatus.Text = "Status: Proteção Ativada";
+            this.lblStatus.Text = "Status: Protection Active";
+            // 
+            // picLogo
+            // 
+            this.picLogo.Location = new System.Drawing.Point(12, 5);
+            this.picLogo.Name = "picLogo";
+            this.picLogo.Size = new System.Drawing.Size(32, 32);
+            this.picLogo.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
+            this.picLogo.TabIndex = 5;
+            this.picLogo.TabStop = false;
+            if (System.IO.File.Exists("logo.png")) this.picLogo.Image = System.Drawing.Image.FromFile("logo.png");
             // 
             // lblVersion
             // 
@@ -70,7 +83,7 @@ namespace io_lockdown
             this.lblVersion.Name = "lblVersion";
             this.lblVersion.Size = new System.Drawing.Size(43, 15);
             this.lblVersion.TabIndex = 4;
-            this.lblVersion.Text = "v1.1.8";
+            this.lblVersion.Text = "v1.1.9";
             // 
             // grpBluetooth
             // 
@@ -101,8 +114,7 @@ namespace io_lockdown
             this.lblBtInfo.Name = "lblBtInfo";
             this.lblBtInfo.Size = new System.Drawing.Size(358, 50);
             this.lblBtInfo.TabIndex = 2;
-            this.lblBtInfo.Text = "Selecione o dispositivo Bluetooth pareado. O sistema bloqueará o PC caso ele se a" +
-    "faste.";
+            this.lblBtInfo.Text = "Select the paired Bluetooth device. The system will lock the PC if it moves away.";
             // 
             // btnSaveBluetooth
             // 
@@ -110,7 +122,7 @@ namespace io_lockdown
             this.btnSaveBluetooth.Name = "btnSaveBluetooth";
             this.btnSaveBluetooth.Size = new System.Drawing.Size(99, 25);
             this.btnSaveBluetooth.TabIndex = 1;
-            this.btnSaveBluetooth.Text = "Ativar Monitor";
+            this.btnSaveBluetooth.Text = "Enable Monitor";
             this.btnSaveBluetooth.UseVisualStyleBackColor = true;
             this.btnSaveBluetooth.Click += new System.EventHandler(this.btnSaveBluetooth_Click);
             // 
@@ -131,7 +143,7 @@ namespace io_lockdown
             this.grpWhitelist.Size = new System.Drawing.Size(377, 120);
             this.grpWhitelist.TabIndex = 3;
             this.grpWhitelist.TabStop = false;
-            this.grpWhitelist.Text = "Whitelist Global de Hardware (PnP)";
+            this.grpWhitelist.Text = "Global Hardware Whitelist (PnP)";
             // 
             // lstWhitelist
             // 
@@ -147,6 +159,7 @@ namespace io_lockdown
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(784, 461);
+            this.Controls.Add(this.picLogo);
             this.Controls.Add(this.lblVersion);
             this.Controls.Add(this.grpWhitelist);
             this.Controls.Add(this.grpBluetooth);
@@ -156,9 +169,10 @@ namespace io_lockdown
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("Icon1")));
             this.MaximizeBox = false;
             this.Name = "Form1";
-            this.Text = "I/O Lockdown - Console de Auditoria";
+            this.Text = "I/O Lockdown - Audit Console";
             this.Load += new System.EventHandler(this.Form1_Load);
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.Form1_FormClosing);
+            ((System.ComponentModel.ISupportInitialize)(this.picLogo)).EndInit();
             this.grpBluetooth.ResumeLayout(false);
             this.grpWhitelist.ResumeLayout(false);
             this.ResumeLayout(false);
