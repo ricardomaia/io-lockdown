@@ -21,6 +21,7 @@ namespace io_lockdown
         private bool _isLocked = false;
         private string _logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "lockdown.log");
         private string _violationDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "violations");
+        private ManagementEventWatcher? _usbWatcher;
 
         [DllImport("user32.dll")]
         public static extern bool LockWorkStation();
@@ -33,8 +34,52 @@ namespace io_lockdown
         {
             try {
                 if (!Directory.Exists(_violationDir)) Directory.CreateDirectory(_violationDir);
-                CaptureHardwareWhitelist(); 
+                CaptureHardwareWhitelist();
+                StartUsbRemovalMonitor();
             } catch { }
+        }
+
+        public void PlayAlarm()
+        {
+            Task.Run(() => {
+                try {
+                    // Try to play Multimedia System Sound (Critical Stop)
+                    System.Media.SystemSounds.Hand.Play();
+                    
+                    // Also trigger the Beep (often falls back to internal speaker if audio drivers are missing)
+                    for (int i = 0; i < 5; i++) {
+                        Console.Beep(1500, 400);
+                        Console.Beep(1000, 400);
+                    }
+                } catch { 
+                    // Fallback to basic Beep if SystemSounds fails
+                    try { Console.Beep(); } catch { }
+                }
+            });
+        }
+
+        public void StartUsbRemovalMonitor()
+        {
+            try {
+                if (_usbWatcher != null) return;
+
+                var query = new WqlEventQuery("SELECT * FROM __InstanceDeletionEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_PnPEntity'");
+                _usbWatcher = new ManagementEventWatcher(query);
+                _usbWatcher.EventArrived += (s, e) => {
+                    if (_isLocked) return;
+
+                    var instance = (ManagementBaseObject)e.NewEvent["TargetInstance"];
+                    string id = instance["PNPDeviceID"]?.ToString() ?? "";
+                    
+                    if (!string.IsNullOrEmpty(id) && IsDeviceAuthorized(id)) {
+                        Log($"TRUSTED DEVICE REMOVED: {id}. Locking system.");
+                        LockWorkStation();
+                        PlayAlarm();
+                    }
+                };
+                _usbWatcher.Start();
+                Log("USB removal monitor activated.");
+            } catch (Exception ex) { Log("Error starting USB monitor: " + ex.Message); }
         }
 
         public bool IsDeviceAuthorized(string pnpDeviceId)
@@ -57,10 +102,11 @@ namespace io_lockdown
         {
             if (_violationDetected) return;
             _violationDetected = true;
-            Log($"VIOLAÇÃO DETECTADA: {reason}. Iniciando Lockdown.");
+            Log($"VIOLATION DETECTED: {reason}. Initiating Lockdown.");
             
             await CapturePhoto();
             
+            PlayAlarm();
             SetNetworkState(false);
             SetUsbHardwareState(false);
         }
@@ -69,7 +115,7 @@ namespace io_lockdown
         {
             try
             {
-                Log("Tentando capturar foto do intruso...");
+                Log("Attempting to capture photo of intruder...");
                 var capture = new MediaCapture();
                 await capture.InitializeAsync(new MediaCaptureInitializationSettings {
                     StreamingCaptureMode = StreamingCaptureMode.Video
@@ -78,9 +124,9 @@ namespace io_lockdown
                 string fileName = $"violation_{DateTime.Now:yyyyMMdd_HHmmss}.jpg";
                 var storageFile = await KnownFolders.PicturesLibrary.CreateFileAsync(fileName, CreationCollisionOption.GenerateUniqueName);
                 await capture.CapturePhotoToStorageFileAsync(ImageEncodingProperties.CreateJpeg(), storageFile);
-                Log($"Foto salva em: {storageFile.Path}");
+                Log($"Photo saved to: {storageFile.Path}");
             }
-            catch (Exception ex) { Log("Erro ao capturar foto: " + ex.Message); }
+            catch (Exception ex) { Log("Error capturing photo: " + ex.Message); }
         }
 
         public void CaptureHardwareWhitelist()
@@ -102,9 +148,9 @@ namespace io_lockdown
                         finally { device.Dispose(); }
                     }
                 }
-                Log($"Whitelist Global: {_trustedDeviceIds.Count} dispositivos monitorados.");
+                Log($"Global Whitelist: {_trustedDeviceIds.Count} devices monitored.");
             }
-            catch (Exception ex) { Log("Erro Whitelist Global: " + ex.Message); }
+            catch (Exception ex) { Log("Global Whitelist error: " + ex.Message); }
         }
 
         public List<string> GetPairedBluetoothDevices()
@@ -118,12 +164,12 @@ namespace io_lockdown
                 {
                     if (!string.IsNullOrEmpty(d.DeviceName))
                     {
-                        string status = d.Connected ? "Conectado" : "Desconectado";
+                        string status = d.Connected ? "Connected" : "Disconnected";
                         deviceNames.Add($"{d.DeviceName} ({status}) [{d.DeviceAddress}]");
                     }
                 }
             }
-            catch (Exception ex) { Log("Erro ao listar Bluetooth: " + ex.Message); }
+            catch (Exception ex) { Log("Error listing Bluetooth devices: " + ex.Message); }
             return deviceNames;
         }
 
@@ -133,7 +179,7 @@ namespace io_lockdown
 
             Task.Run(async () => {
                 var client = new BluetoothClient();
-                Log($"Monitor Bluetooth iniciado para endereço: {targetAddress}.");
+                Log($"Bluetooth monitor started for address: {targetAddress}.");
                 int failureCount = 0;
                 
                 while (true)
@@ -153,15 +199,15 @@ namespace io_lockdown
 
                         if (!isActuallyConnected) {
                             failureCount++;
-                            Log($"Conexão Bluetooth ausente ({failureCount}/3).");
+                            Log($"Bluetooth connection missing ({failureCount}/3).");
                             
                             if (failureCount >= 3) {
-                                Log("Dispositivo Bluetooth desconectado. Bloqueando tela...");
+                                Log("Bluetooth device disconnected. Locking screen...");
                                 LockWorkStation();
                                 failureCount = 0; 
                             }
                         } else {
-                            if (failureCount > 0) Log("Dispositivo Bluetooth verificado como conectado.");
+                            if (failureCount > 0) Log("Bluetooth device verified as connected.");
                             failureCount = 0;
                         }
                     }
@@ -191,9 +237,9 @@ namespace io_lockdown
                         finally { item.Dispose(); }
                     }
                 }
-                Log($"Rede: {methodName}");
+                Log($"Network: {methodName}");
             }
-            catch (Exception ex) { Log("Erro Rede: " + ex.Message); }
+            catch (Exception ex) { Log("Network error: " + ex.Message); }
         }
 
         public void SetUsbHardwareState(bool enable)
@@ -211,7 +257,7 @@ namespace io_lockdown
                 Process.Start(psi)?.WaitForExit();
                 Log($"USB Hardware: {action}");
             }
-            catch (Exception ex) { Log("Erro USB HW: " + ex.Message); }
+            catch (Exception ex) { Log("USB HW error: " + ex.Message); }
         }
 
         public void SetUsbStorageState(bool enable)
@@ -223,9 +269,9 @@ namespace io_lockdown
                 {
                     if (key != null) key.SetValue("Start", enable ? 3 : 4, RegistryValueKind.DWord);
                 }
-                Log($"USB Storage: {(enable ? "Ativo" : "Bloqueado")}");
+                Log($"USB Storage: {(enable ? "Active" : "Blocked")}");
             }
-            catch (Exception ex) { Log("Erro USB Storage: " + ex.Message); }
+            catch (Exception ex) { Log("USB Storage error: " + ex.Message); }
         }
     }
 }

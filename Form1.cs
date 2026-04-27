@@ -27,6 +27,8 @@ namespace io_lockdown
                 this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             } catch { }
 
+            lblVersion.Text = $"v{Application.ProductVersion.Substring(0, 5)}";
+
             _logTimer = new System.Windows.Forms.Timer();
             _logTimer.Interval = 2000;
             _logTimer.Tick += (s, e) => RefreshLogs();
@@ -40,17 +42,22 @@ namespace io_lockdown
 
         private void Form1_Load(object sender, EventArgs e)
         {
-            DebugLog("Iniciando Form1_Load");
+            DebugLog("Starting Form1_Load");
             try
             {
                 SystemEvents.SessionSwitch += new SessionSwitchEventHandler(SystemEvents_SessionSwitch);
-                DebugLog("Eventos de Sessão registrados.");
+                DebugLog("Session events registered.");
 
                 var menu = new ContextMenuStrip();
-                menu.Items.Add("Exibir Console de Auditoria", null, (s, ev) => ShowConsole());
+                var versionItem = new ToolStripMenuItem($"I/O Lockdown {lblVersion.Text}");
+                versionItem.Enabled = false;
+                versionItem.Font = new Font(this.Font, FontStyle.Bold);
+                menu.Items.Add(versionItem);
                 menu.Items.Add("-");
-                menu.Items.Add("Sair e Parar Serviço", null, (s, ev) => ExitApplication());
-                DebugLog("Menu de contexto criado.");
+                menu.Items.Add("Show Audit Console", null, (s, ev) => ShowConsole());
+                menu.Items.Add("-");
+                menu.Items.Add("Exit and Stop Service", null, (s, ev) => ExitApplication());
+                DebugLog("Context menu created.");
 
                 trayIcon = new NotifyIcon();
                 trayIcon.Icon = this.Icon; 
@@ -58,22 +65,22 @@ namespace io_lockdown
                 trayIcon.ContextMenuStrip = menu;
                 trayIcon.Visible = true;
                 trayIcon.MouseClick += (s, ev) => { if (ev.Button == MouseButtons.Left) ShowConsole(); };
-                DebugLog("NotifyIcon configurado.");
+                DebugLog("NotifyIcon configured.");
 
                 RefreshWhitelistListOnly();
                 RefreshBluetoothList();
 
-                _engine.Log("Interface de usuário carregada com sucesso.");
-                DebugLog("Load finalizado.");
+                _engine.Log("User interface loaded successfully.");
+                DebugLog("Load finished.");
 
-                // Inicia minimizado na bandeja
+                // Start minimized to tray
                 this.WindowState = FormWindowState.Minimized;
                 this.ShowInTaskbar = false;
                 this.BeginInvoke(new MethodInvoker(this.Hide));
             }
             catch (Exception ex)
             {
-                DebugLog($"ERRO FATAL NO LOAD: {ex.Message}\n{ex.StackTrace}");
+                DebugLog($"FATAL ERROR ON LOAD: {ex.Message}\n{ex.StackTrace}");
             }
         }
 
@@ -85,7 +92,7 @@ namespace io_lockdown
                 var devices = _engine.GetPairedBluetoothDevices();
                 if (devices.Count == 0)
                 {
-                    _engine.Log("Nenhum dispositivo Bluetooth pareado encontrado.");
+                    _engine.Log("No paired Bluetooth devices found.");
                     return;
                 }
 
@@ -97,7 +104,7 @@ namespace io_lockdown
                 if (cmbBluetoothDevices.Items.Count > 0)
                     cmbBluetoothDevices.SelectedIndex = 0;
             }
-            catch (Exception ex) { _engine.Log("Erro ao atualizar lista Bluetooth: " + ex.Message); }
+            catch (Exception ex) { _engine.Log("Error updating Bluetooth list: " + ex.Message); }
         }
 
         private void btnRefreshBluetooth_Click(object sender, EventArgs e)
@@ -121,22 +128,22 @@ namespace io_lockdown
                     lstWhitelist.Items.Add(id);
                 }
             }
-            catch (Exception ex) { _engine.Log("Erro ao atualizar UI da Whitelist: " + ex.Message); }
+            catch (Exception ex) { _engine.Log("Error updating Whitelist UI: " + ex.Message); }
         }
 
         private void btnSaveBluetooth_Click(object sender, EventArgs e)
         {
             if (cmbBluetoothDevices.SelectedItem == null)
             {
-                MessageBox.Show("Por favor, selecione um dispositivo Bluetooth na lista.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Please select a Bluetooth device from the list.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
             string selectedItem = cmbBluetoothDevices.SelectedItem?.ToString() ?? "";
             
-            if (string.IsNullOrEmpty(selectedItem) || selectedItem.Contains("(Desconectado)"))
+            if (string.IsNullOrEmpty(selectedItem) || selectedItem.Contains("(Disconnected)"))
             {
-                MessageBox.Show("Por favor, selecione um dispositivo Bluetooth conectado.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Please select a connected Bluetooth device.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -150,7 +157,7 @@ namespace io_lockdown
 
             if (string.IsNullOrEmpty(targetAddress))
             {
-                MessageBox.Show("Não foi possível identificar o endereço do dispositivo.", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Could not identify the device address.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
@@ -161,8 +168,8 @@ namespace io_lockdown
             cmbBluetoothDevices.Enabled = false;
             
             string displayLabel = selectedItem.Substring(0, start).Trim();
-            lblBtInfo.Text = $"Monitorando: {displayLabel}. Para alterar, reinicie o aplicativo.";
-            _engine.Log($"Monitoramento Bluetooth configurado para endereço: {targetAddress}");
+            lblBtInfo.Text = $"Monitoring: {displayLabel}. To change, restart the application.";
+            _engine.Log($"Bluetooth monitoring configured for address: {targetAddress}");
         }
 
         private void ShowConsole()
@@ -194,9 +201,13 @@ namespace io_lockdown
                 if (File.Exists(logPath)) {
                     using (var fs = new FileStream(logPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                     using (var sr = new StreamReader(fs)) {
-                        rtbLogs.Text = sr.ReadToEnd();
-                        rtbLogs.SelectionStart = rtbLogs.Text.Length;
-                        rtbLogs.ScrollToCaret();
+                        string newContent = sr.ReadToEnd();
+                        if (rtbLogs.Text != newContent)
+                        {
+                            rtbLogs.Text = newContent;
+                            rtbLogs.SelectionStart = rtbLogs.Text.Length;
+                            rtbLogs.ScrollToCaret();
+                        }
                     }
                 }
             } catch { }
@@ -211,13 +222,12 @@ namespace io_lockdown
                 
                 if (eventType == DBT_DEVICEARRIVAL)
                 {
-                    // Movemos a checagem para uma thread de background para evitar erro de Cast/STA no WndProc
                     Task.Run(() => CheckNewHardwareIntegrity());
                 }
 
                 if (_isLocked && (eventType == DBT_DEVICEARRIVAL || eventType == DBT_DEVICEREMOVECOMPLETE))
                 {
-                    _ = _engine.TriggerViolation("Mudança de hardware detectada durante bloqueio.");
+                    _ = _engine.TriggerViolation("Hardware change detected during lockdown.");
                 }
             }
         }
@@ -237,8 +247,8 @@ namespace io_lockdown
                             string id = val?.ToString() ?? "";
                             if (!string.IsNullOrEmpty(id) && !_engine.IsDeviceAuthorized(id))
                             {
-                                _engine.Log($"DISPOSITIVO NÃO AUTORIZADO DETECTADO: {id}");
-                                _ = _engine.TriggerViolation($"Novo hardware não autorizado: {id}");
+                                _engine.Log($"UNAUTHORIZED DEVICE DETECTED: {id}");
+                                _ = _engine.TriggerViolation($"New unauthorized hardware: {id}");
                                 LockdownEngine.LockWorkStation();
                             }
                         }
@@ -246,7 +256,7 @@ namespace io_lockdown
                     }
                 }
             }
-            catch (Exception ex) { _engine.Log("Erro na checagem de integridade PnP: " + ex.Message); }
+            catch (Exception ex) { _engine.Log("Error in PnP integrity check: " + ex.Message); }
         }
 
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
