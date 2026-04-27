@@ -118,7 +118,7 @@ namespace io_lockdown
             this.grpWhitelist.Size = new System.Drawing.Size(377, 120);
             this.grpWhitelist.TabIndex = 3;
             this.grpWhitelist.TabStop = false;
-            this.grpWhitelist.Text = "Whitelist de Hardware (Teclados/Mouses)";
+            this.grpWhitelist.Text = "Whitelist Global de Hardware (PnP)";
             // 
             // lstWhitelist
             // 

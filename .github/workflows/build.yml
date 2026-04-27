@@ -1,0 +1,44 @@
+name: Build and Package
+
+on:
+  push:
+    branches: [ "main", "release/**" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build and Publish
+      run: |
+        dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -o ./publish /p:TargetFramework=net9.0-windows10.0.19041.0
+
+    - name: Install WiX Toolset
+      run: dotnet tool install --global wix
+
+    - name: Add WiX Extensions
+      run: |
+        wix extension add WixToolset.UI.wixext/5.0.2 --global
+        wix extension add WixToolset.Util.wixext/5.0.2 --global
+
+    - name: Build MSI
+      run: |
+        wix build Package.wxs -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext -o "IOLockdown_Installer.msi"
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: IOLockdown-MSI
+        path: IOLockdown_Installer.msi

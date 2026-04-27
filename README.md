@@ -1,53 +1,66 @@
 # I/O Lockdown
 
-I/O Lockdown é uma ferramenta de segurança de endpoint para Windows, projetada para proteger estações de trabalho contra ataques de periféricos físicos e exfiltração de dados enquanto o sistema está bloqueado.
+[![Build Status](https://github.com/rsmaia/io-lockdown/actions/workflows/build.yml/badge.svg)](https://github.com/rsmaia/io-lockdown/actions/workflows/build.yml)
 
-## Objetivo e Estratégia de Defesa
+I/O Lockdown is a Windows endpoint security tool designed to protect workstations from physical peripheral attacks and data exfiltration while the system is locked or unattended.
 
-O software implementa uma política de **Fail-Close** para mitigar vetores de ataque como BadUSB (Rubber Ducky), Keyloggers de hardware e Rogue Network Adapters.
+## Defense Objectives & Strategy
 
-### 1. Bloqueio Lógico (Sessão Bloqueada)
-Ao detectar que a sessão foi bloqueada (`Win+L`), o sistema executa:
-- **Network Kill-Switch:** Desativa todos os adaptadores de rede (Ethernet/Wi-Fi) via WMI.
-- **USB Storage Block:** Desativa o serviço `USBSTOR` no registro para impedir a montagem de pendrives.
-- **Whitelist de Hardware:** Captura o estado atual dos dispositivos de entrada confiáveis.
+The software implements a **Fail-Close** policy to mitigate attack vectors such as BadUSB (Rubber Ducky), hardware Keyloggers, and Rogue Network Adapters.
 
-### 2. Monitoramento Anti-Tampering (Hardware)
-Enquanto bloqueado, o aplicativo monitora o barramento USB. Se houver qualquer alteração física (conexão de um novo dispositivo ou remoção de um existente):
-- **Detecção de Violação:** O sistema identifica a mudança via eventos `WM_DEVICECHANGE`.
-- **Evidência Visual:** O sistema captura automaticamente uma foto do intruso usando a webcam disponível.
-- **Lockdown Total:** Todos os controladores USB (Hubs e Root Controllers) são desativados via PowerShell (`Disable-PnpDevice`).
-- **Persistência de Segurança:** O estado de "Violação Detectada" impede a reativação das interfaces ao desbloquear a tela.
+### 1. Logical Blocking (Locked Session)
+Upon detecting a session lock (`Win+L`), the system executes:
+- **Network Kill-Switch:** Disables all network adapters (Ethernet/Wi-Fi) via WMI.
+- **USB Storage Block:** Disables the `USBSTOR` service in the registry to prevent mounting unauthorized drives.
+- **Real-time Whitelisting:** Captures the current state of trusted hardware entities.
 
-### 3. Smart Lock (Proximidade Bluetooth)
-O sistema pode ser configurado para monitorar a presença de um dispositivo Bluetooth pareado (ex: seu celular). Se o dispositivo sair do alcance, o Windows é bloqueado automaticamente.
+### 2. Anti-Tampering Monitoring (Hardware)
+While active, the application monitors the PnP (Plug and Play) bus. If any physical change occurs (connection of a new device or removal of an existing one):
+- **Violation Detection:** Instantly identifies changes via `WM_DEVICECHANGE` events.
+- **Visual Evidence:** Automatically captures a photo of the intruder using the available webcam.
+- **Total Lockdown:** Disables all USB controllers (Hubs and Root Controllers) via PowerShell (`Disable-PnpDevice`).
+- **Security Persistence:** The "Violation Detected" state prevents automatic re-activation of interfaces upon unlocking.
 
-## Modos de Operação
+### 3. Smart Lock (Bluetooth Proximity)
+The system can monitor a paired Bluetooth device (e.g., your smartphone). If the device goes out of range, Windows is automatically locked.
 
-- **Interface de Auditoria:** Aplicação de bandeja que permite visualizar logs em tempo real.
-- **Modo Serviço:** Pode ser executado como um serviço do Windows (`--service`) para proteção em nível de sistema sem necessidade de login de usuário.
+## Operation Modes
+- **Audit Interface:** A system tray application for real-time log monitoring.
+- **Service Mode:** Can run as a Windows Service (`--service`) for system-level protection without requiring user login.
 
-## Consequências de uma Violação
+## Build Instructions
 
-Se uma violação ocorrer enquanto o PC estiver bloqueado:
-1. As portas USB pararão de responder (incluindo teclado e mouse legítimos).
-2. Uma foto da tentativa de intrusão será salva na pasta de Imagens.
-3. Ao desbloquear o Windows, os logs mostrarão o horário exato e o motivo da violação.
-4. **Recuperação:** É necessário reiniciar fisicamente o computador para que o Windows reinicie os controladores de hardware desativados.
+### Prerequisites
+- **.NET 9.0 SDK**
+- **WiX Toolset v5** (for MSI generation)
+- **Administrator Privileges** (for hardware manipulation)
 
-## Requisitos de Sistema
+### Compilation Steps
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/rsmaia/io-lockdown.git
+   cd io-lockdown
+   ```
+2. **Build the executable:**
+   ```powershell
+   ./build.ps1
+   ```
+3. **Generate the MSI installer:**
+   ```powershell
+   ./make-msi.ps1
+   ```
 
-- **SO:** Windows 10/11
-- **Privilégios:** Executar como Administrador (necessário para manipulação de hardware PnP e Registro).
+## System Requirements
+- **OS:** Windows 10/11
+- **Privileges:** Run as Administrator.
 - **Framework:** .NET 9.0
 
-## Tecnologias Utilizadas
-
-- **C# / .NET 9.0:** Lógica principal e interface.
-- **WMI & PnP PowerShell:** Gestão de estado de dispositivos de baixo nível.
-- **Win32 API:** Captura de eventos de hardware e controle de sessão.
-- **InTheHand.Net:** Integração Bluetooth para Smart Lock.
-- **UWP MediaCapture:** Captura de fotos para evidência de violação.
+## Technologies
+- **C# / .NET 9.0:** Core logic and UI.
+- **WMI & PnP PowerShell:** Low-level hardware state management.
+- **Win32 API:** Real-time hardware events and session control.
+- **InTheHand.Net:** Bluetooth integration for Smart Lock.
+- **UWP MediaCapture:** Violation evidence photography.
 
 ---
-*Aviso: Use com cautela. A desconexão acidental do seu teclado durante o bloqueio resultará no desligamento das portas USB, exigindo reinício do sistema.*
+*Warning: Use with caution. Accidental disconnection of your trusted keyboard during lockdown will result in USB port shutdown, requiring a physical system restart.*

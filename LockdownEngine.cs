@@ -33,7 +33,13 @@ namespace io_lockdown
         {
             try {
                 if (!Directory.Exists(_violationDir)) Directory.CreateDirectory(_violationDir);
+                CaptureHardwareWhitelist(); // Captura base inicial de confiança
             } catch { }
+        }
+
+        public bool IsDeviceAuthorized(string pnpDeviceId)
+        {
+            return _trustedDeviceIds.Contains(pnpDeviceId);
         }
 
         public void Log(string message)
@@ -81,21 +87,18 @@ namespace io_lockdown
             _trustedDeviceIds.Clear();
             try
             {
-                string[] queries = { "SELECT PNPDeviceID FROM Win32_Keyboard", "SELECT PNPDeviceID FROM Win32_PointingDevice" };
-                foreach (var q in queries)
+                // Captura TODOS os dispositivos PnP atualmente presentes no sistema
+                using (var searcher = new ManagementObjectSearcher(new SelectQuery("SELECT PNPDeviceID FROM Win32_PnPEntity WHERE Present = True")))
                 {
-                    using (var searcher = new ManagementObjectSearcher(new SelectQuery(q)))
+                    foreach (ManagementObject device in searcher.Get())
                     {
-                        foreach (ManagementObject device in searcher.Get())
-                        {
-                            string id = device["PNPDeviceID"]?.ToString() ?? "";
-                            if (!string.IsNullOrEmpty(id)) _trustedDeviceIds.Add(id);
-                        }
+                        string id = device["PNPDeviceID"]?.ToString() ?? "";
+                        if (!string.IsNullOrEmpty(id)) _trustedDeviceIds.Add(id);
                     }
                 }
-                Log($"Whitelist: {_trustedDeviceIds.Count} dispositivos.");
+                Log($"Whitelist Global: {_trustedDeviceIds.Count} dispositivos monitorados.");
             }
-            catch (Exception ex) { Log("Erro Whitelist: " + ex.Message); }
+            catch (Exception ex) { Log("Erro Whitelist Global: " + ex.Message); }
         }
 
         public List<string> GetPairedBluetoothDevices()

@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using Microsoft.Win32;
 using System.IO;
+using System.Management;
 
 namespace io_lockdown
 {
@@ -20,6 +21,12 @@ namespace io_lockdown
         public Form1()
         {
             InitializeComponent();
+            
+            // Força o carregamento do ícone personalizado no formulário
+            try {
+                this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+            } catch { }
+
             _logTimer = new System.Windows.Forms.Timer();
             _logTimer.Interval = 2000;
             _logTimer.Tick += (s, e) => RefreshLogs();
@@ -46,23 +53,23 @@ namespace io_lockdown
                 DebugLog("Menu de contexto criado.");
 
                 trayIcon = new NotifyIcon();
-                // Extrai o ícone associado ao arquivo .exe para garantir sincronia com o Explorer
-                try {
-                    trayIcon.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-                } catch {
-                    trayIcon.Icon = this.Icon; // Fallback para o ícone do Form
-                }
+                trayIcon.Icon = this.Icon; 
                 trayIcon.Text = "I/O Lockdown";
                 trayIcon.ContextMenuStrip = menu;
                 trayIcon.Visible = true;
                 trayIcon.MouseClick += (s, ev) => { if (ev.Button == MouseButtons.Left) ShowConsole(); };
                 DebugLog("NotifyIcon configurado.");
 
-                UpdateWhitelistUI();
+                RefreshWhitelistListOnly();
                 RefreshBluetoothList();
 
                 _engine.Log("Interface de usuário carregada com sucesso.");
                 DebugLog("Load finalizado.");
+
+                // Inicia minimizado na bandeja
+                this.WindowState = FormWindowState.Minimized;
+                this.ShowInTaskbar = false;
+                this.BeginInvoke(new MethodInvoker(this.Hide));
             }
             catch (Exception ex)
             {
@@ -98,17 +105,16 @@ namespace io_lockdown
             RefreshBluetoothList();
         }
 
-        private void UpdateWhitelistUI()
+        private void RefreshWhitelistListOnly()
         {
             if (this.InvokeRequired)
             {
-                this.Invoke(new Action(UpdateWhitelistUI));
+                this.Invoke(new Action(RefreshWhitelistListOnly));
                 return;
             }
 
             try
             {
-                _engine.CaptureHardwareWhitelist();
                 lstWhitelist.Items.Clear();
                 foreach (var id in _engine.TrustedDeviceIds)
                 {
@@ -126,7 +132,7 @@ namespace io_lockdown
                 return;
             }
 
-            string selectedItem = cmbBluetoothDevices.SelectedItem.ToString() ?? "";
+            string selectedItem = cmbBluetoothDevices.SelectedItem?.ToString() ?? "";
             
             if (selectedItem.Contains("(Desconectado)"))
             {
@@ -134,7 +140,6 @@ namespace io_lockdown
                 return;
             }
 
-            // Extrai o endereço MAC entre os colchetes [ ]
             string targetAddress = "";
             int start = selectedItem.LastIndexOf("[");
             int end = selectedItem.LastIndexOf("]");
@@ -163,6 +168,7 @@ namespace io_lockdown
         private void ShowConsole()
         {
             this.Show();
+            this.ShowInTaskbar = true;
             this.WindowState = FormWindowState.Normal;
             this.BringToFront();
             this.Activate();
@@ -199,19 +205,47 @@ namespace io_lockdown
         protected override void WndProc(ref Message m)
         {
             base.WndProc(ref m);
-            if (_isLocked && m.Msg == WM_DEVICECHANGE)
+            if (m.Msg == WM_DEVICECHANGE)
             {
                 int eventType = m.WParam.ToInt32();
-                if (eventType == DBT_DEVICEARRIVAL || eventType == DBT_DEVICEREMOVECOMPLETE)
+                
+                if (eventType == DBT_DEVICEARRIVAL)
                 {
-                    _ = _engine.TriggerViolation("Mudança de hardware detectada.");
+                    // Monitoramento Global em tempo real
+                    CheckNewHardwareIntegrity();
+                }
+
+                if (_isLocked && (eventType == DBT_DEVICEARRIVAL || eventType == DBT_DEVICEREMOVECOMPLETE))
+                {
+                    _ = _engine.TriggerViolation("Mudança de hardware detectada durante bloqueio.");
                 }
             }
         }
 
+        private void CheckNewHardwareIntegrity()
+        {
+            try
+            {
+                using (var searcher = new ManagementObjectSearcher(new SelectQuery("SELECT PNPDeviceID FROM Win32_PnPEntity WHERE Present = True")))
+                {
+                    foreach (ManagementObject device in searcher.Get())
+                    {
+                        string id = device["PNPDeviceID"]?.ToString() ?? "";
+                        if (!string.IsNullOrEmpty(id) && !_engine.IsDeviceAuthorized(id))
+                        {
+                            _engine.Log($"DISPOSITIVO NÃO AUTORIZADO DETECTADO: {id}");
+                            _ = _engine.TriggerViolation($"Novo hardware não autorizado: {id}");
+                            LockdownEngine.LockWorkStation(); // Bloqueia a tela imediatamente
+                        }
+                    }
+                }
+            }
+            catch (Exception ex) { _engine.Log("Erro na checagem de integridade PnP: " + ex.Message); }
+        }
+
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
-            if (e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; this.Hide(); }
+            if (e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; this.Hide(); this.ShowInTaskbar = false; }
         }
 
         void SystemEvents_SessionSwitch(object sender, SessionSwitchEventArgs e)
@@ -220,7 +254,8 @@ namespace io_lockdown
                 case SessionSwitchReason.SessionLock:
                     _isLocked = true;
                     _engine.IsLocked = true;
-                    UpdateWhitelistUI();
+                    _engine.CaptureHardwareWhitelist();
+                    RefreshWhitelistListOnly();
                     _engine.SetNetworkState(false);
                     _engine.SetUsbStorageState(false);
                     break;
