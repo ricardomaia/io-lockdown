@@ -95,10 +95,11 @@ namespace io_lockdown
                     {
                         try 
                         {
-                            object? val = device.GetPropertyValue("PNPDeviceID");
-                            if (val != null) _trustedDeviceIds.Add(val.ToString() ?? "");
+                            var id = device.GetPropertyValue("PNPDeviceID")?.ToString();
+                            if (!string.IsNullOrEmpty(id)) _trustedDeviceIds.Add(id);
                         }
                         catch { }
+                        finally { device.Dispose(); }
                     }
                 }
                 Log($"Whitelist Global: {_trustedDeviceIds.Count} dispositivos monitorados.");
@@ -185,7 +186,9 @@ namespace io_lockdown
                 {
                     foreach (ManagementObject item in collection)
                     {
-                        try { item.InvokeMethod(methodName, null); } catch { }
+                        try { item.InvokeMethod(methodName, null); } 
+                        catch { }
+                        finally { item.Dispose(); }
                     }
                 }
                 Log($"Rede: {methodName}");
