@@ -172,6 +172,17 @@ namespace io_lockdown
             _engine.Log($"Bluetooth monitoring configured for address: {targetAddress}");
         }
 
+        private void btnReset_Click(object sender, EventArgs e)
+        {
+            if (MessageBox.Show("Are you sure you want to clear the violation state and restore all hardware?", "Confirm Reset", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+            {
+                _engine.ResetSystemToSafeState();
+                lblStatus.Text = "Status: Protection Active";
+                lblStatus.ForeColor = Color.Black;
+                RefreshLogs();
+            }
+        }
+
         private void ShowConsole()
         {
             this.Show();
@@ -196,6 +207,13 @@ namespace io_lockdown
         private void RefreshLogs()
         {
             if (!this.Visible) return;
+
+            if (_engine.ViolationDetected)
+            {
+                lblStatus.Text = "Status: VIOLATION DETECTED - SYSTEM LOCKED";
+                lblStatus.ForeColor = Color.Red;
+            }
+
             try {
                 string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "lockdown.log");
                 if (File.Exists(logPath)) {
@@ -279,8 +297,7 @@ namespace io_lockdown
                     _isLocked = false;
                     _engine.IsLocked = false;
                     if (!_engine.ViolationDetected) {
-                        _engine.SetUsbStorageState(true);
-                        _engine.SetNetworkState(true);
+                        _engine.ResetSystemToSafeState();
                     }
                     break;
             }

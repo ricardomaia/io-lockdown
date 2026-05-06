@@ -24,11 +24,14 @@ namespace io_lockdown
             base.Dispose(disposing);
         }
 
+        private System.Windows.Forms.Button btnReset;
+
         private void InitializeComponent()
         {
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
             this.rtbLogs = new System.Windows.Forms.RichTextBox();
             this.lblStatus = new System.Windows.Forms.Label();
+            this.btnReset = new System.Windows.Forms.Button();
             this.lblVersion = new System.Windows.Forms.Label();
             this.picLogo = new System.Windows.Forms.PictureBox();
             this.grpBluetooth = new System.Windows.Forms.GroupBox();
@@ -63,6 +66,20 @@ namespace io_lockdown
             this.lblStatus.Size = new System.Drawing.Size(210, 21);
             this.lblStatus.TabIndex = 1;
             this.lblStatus.Text = "Status: Protection Active";
+            // 
+            // btnReset
+            // 
+            this.btnReset.BackColor = System.Drawing.Color.DarkRed;
+            this.btnReset.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnReset.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            this.btnReset.ForeColor = System.Drawing.Color.White;
+            this.btnReset.Location = new System.Drawing.Point(450, 7);
+            this.btnReset.Name = "btnReset";
+            this.btnReset.Size = new System.Drawing.Size(120, 27);
+            this.btnReset.TabIndex = 6;
+            this.btnReset.Text = "RESET LOCKDOWN";
+            this.btnReset.UseVisualStyleBackColor = false;
+            this.btnReset.Click += new System.EventHandler(this.btnReset_Click);
             // 
             // picLogo
             // 
@@ -159,6 +176,7 @@ namespace io_lockdown
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(784, 461);
+            this.Controls.Add(this.btnReset);
             this.Controls.Add(this.picLogo);
             this.Controls.Add(this.lblVersion);
             this.Controls.Add(this.grpWhitelist);

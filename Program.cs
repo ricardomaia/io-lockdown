@@ -49,6 +49,9 @@ namespace io_lockdown
                 Log("Criando Form1.");
                 Form1 f = new Form1();
                 
+                // Ensure the form is created and handles are initialized to process events
+                IntPtr handle = f.Handle; 
+                
                 Log("Iniciando Application.Run.");
                 Application.Run(f);
             }

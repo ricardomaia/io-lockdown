@@ -6,9 +6,6 @@ using Microsoft.Win32;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
-using Windows.Media.Capture;
-using Windows.Storage;
-using Windows.Media.MediaProperties;
 using InTheHand.Net.Sockets;
 using InTheHand.Net.Bluetooth;
 
@@ -21,65 +18,110 @@ namespace io_lockdown
         private bool _isLocked = false;
         private string _logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "lockdown.log");
         private string _violationDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "violations");
-        private ManagementEventWatcher? _usbWatcher;
+        private ManagementEventWatcher? _usbRemovalWatcher;
+        private ManagementEventWatcher? _usbArrivalWatcher;
+        private IHardwareController _hardware;
+        private static IHardwareController _staticHardware = new WindowsHardwareController();
 
-        [DllImport("user32.dll")]
-        public static extern bool LockWorkStation();
+        public static void LockWorkStation() => _staticHardware.LockWorkStation();
+
+        public void RequestLock(string reason)
+        {
+            Log($"LOCK REQUESTED: {reason}");
+            bool success = _hardware.LockWorkStation();
+            Log($"LockWorkStation result: {success}");
+        }
 
         public bool ViolationDetected => _violationDetected;
         public List<string> TrustedDeviceIds => _trustedDeviceIds;
         public bool IsLocked { get => _isLocked; set => _isLocked = value; }
 
-        public LockdownEngine()
+        public LockdownEngine(IHardwareController? hardware = null)
         {
+            _hardware = hardware ?? new WindowsHardwareController();
             try {
                 if (!Directory.Exists(_violationDir)) Directory.CreateDirectory(_violationDir);
+                ResetSystemToSafeState();
                 CaptureHardwareWhitelist();
-                StartUsbRemovalMonitor();
+                StartHardwareMonitors();
             } catch { }
         }
 
-        public void PlayAlarm()
+        public void ResetSystemToSafeState()
         {
-            Task.Run(() => {
-                try {
-                    // Try to play Multimedia System Sound (Critical Stop)
-                    System.Media.SystemSounds.Hand.Play();
-                    
-                    // Also trigger the Beep (often falls back to internal speaker if audio drivers are missing)
-                    for (int i = 0; i < 5; i++) {
-                        Console.Beep(1500, 400);
-                        Console.Beep(1000, 400);
-                    }
-                } catch { 
-                    // Fallback to basic Beep if SystemSounds fails
-                    try { Console.Beep(); } catch { }
-                }
-            });
+            Log("Executing Fail-Safe: Restoring hardware and network states.");
+            _violationDetected = false;
+            _isLocked = false;
+            
+            _hardware.SetUsbStorageState(true);
+            _hardware.SetNetworkState(true);
+            _hardware.SetUsbHardwareState(true);
+        }
+
+        public void StartHardwareMonitors()
+        {
+            StartUsbRemovalMonitor();
+            StartUsbArrivalMonitor();
+        }
+
+        public void StartUsbArrivalMonitor()
+        {
+            try {
+                if (_usbArrivalWatcher != null) return;
+
+                Log("Initializing Arrival monitor...");
+                var query = new WqlEventQuery("SELECT * FROM __InstanceCreationEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_PnPEntity'");
+                _usbArrivalWatcher = new ManagementEventWatcher(query);
+                _usbArrivalWatcher.EventArrived += (s, e) => {
+                    try {
+                        var instance = (ManagementBaseObject)e.NewEvent["TargetInstance"];
+                        string id = instance["PNPDeviceID"]?.ToString() ?? "Unknown ID";
+                        string name = instance["Name"]?.ToString() ?? "Unknown Name";
+                        Log($"EVENT: Hardware Arrival detected: {name} ({id})");
+                        
+                        if (_isLocked) {
+                            _ = TriggerViolation($"Hardware connection detected during lockdown: {id}");
+                        } else {
+                            if (!IsDeviceAuthorized(id)) {
+                                RequestLock($"UNAUTHORIZED DEVICE ARRIVAL: {id}");
+                                _ = TriggerViolation($"New unauthorized hardware connected: {id}");
+                            }
+                        }
+                    } catch (Exception ex) { Log("Error processing Arrival event: " + ex.Message); }
+                };
+                _usbArrivalWatcher.Start();
+                Log("Hardware arrival monitor activated.");
+            } catch (Exception ex) { Log("Error starting Arrival monitor: " + ex.Message); }
         }
 
         public void StartUsbRemovalMonitor()
         {
             try {
-                if (_usbWatcher != null) return;
+                if (_usbRemovalWatcher != null) return;
 
+                Log("Initializing Removal monitor...");
                 var query = new WqlEventQuery("SELECT * FROM __InstanceDeletionEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_PnPEntity'");
-                _usbWatcher = new ManagementEventWatcher(query);
-                _usbWatcher.EventArrived += (s, e) => {
-                    if (_isLocked) return;
-
-                    var instance = (ManagementBaseObject)e.NewEvent["TargetInstance"];
-                    string id = instance["PNPDeviceID"]?.ToString() ?? "";
-                    
-                    if (!string.IsNullOrEmpty(id) && IsDeviceAuthorized(id)) {
-                        Log($"TRUSTED DEVICE REMOVED: {id}. Locking system.");
-                        LockWorkStation();
-                        PlayAlarm();
-                    }
+                _usbRemovalWatcher = new ManagementEventWatcher(query);
+                _usbRemovalWatcher.EventArrived += (s, e) => {
+                    try {
+                        var instance = (ManagementBaseObject)e.NewEvent["TargetInstance"];
+                        string id = instance["PNPDeviceID"]?.ToString() ?? "Unknown ID";
+                        string name = instance["Name"]?.ToString() ?? "Unknown Name";
+                        Log($"EVENT: Hardware Removal detected: {name} ({id})");
+                        
+                        if (_isLocked) {
+                            _ = TriggerViolation($"Hardware removal detected during lockdown: {id}");
+                        } else {
+                            if (IsDeviceAuthorized(id)) {
+                                RequestLock($"TRUSTED DEVICE REMOVED: {id}");
+                                _hardware.PlayAlarm();
+                            }
+                        }
+                    } catch (Exception ex) { Log("Error processing Removal event: " + ex.Message); }
                 };
-                _usbWatcher.Start();
-                Log("USB removal monitor activated.");
-            } catch (Exception ex) { Log("Error starting USB monitor: " + ex.Message); }
+                _usbRemovalWatcher.Start();
+                Log("Hardware removal monitor activated.");
+            } catch (Exception ex) { Log("Error starting Removal monitor: " + ex.Message); }
         }
 
         public bool IsDeviceAuthorized(string pnpDeviceId)
@@ -104,50 +146,17 @@ namespace io_lockdown
             _violationDetected = true;
             Log($"VIOLATION DETECTED: {reason}. Initiating Lockdown.");
             
-            await CapturePhoto();
-            
-            PlayAlarm();
-            SetNetworkState(false);
-            SetUsbHardwareState(false);
-        }
-
-        private async Task CapturePhoto()
-        {
-            try
-            {
-                Log("Attempting to capture photo of intruder...");
-                var capture = new MediaCapture();
-                await capture.InitializeAsync(new MediaCaptureInitializationSettings {
-                    StreamingCaptureMode = StreamingCaptureMode.Video
-                });
-
-                string fileName = $"violation_{DateTime.Now:yyyyMMdd_HHmmss}.jpg";
-                var storageFile = await KnownFolders.PicturesLibrary.CreateFileAsync(fileName, CreationCollisionOption.GenerateUniqueName);
-                await capture.CapturePhotoToStorageFileAsync(ImageEncodingProperties.CreateJpeg(), storageFile);
-                Log($"Photo saved to: {storageFile.Path}");
-            }
-            catch (Exception ex) { Log("Error capturing photo: " + ex.Message); }
+            await _hardware.CapturePhoto();
+            _hardware.PlayAlarm();
+            _hardware.SetNetworkState(false);
+            _hardware.SetUsbHardwareState(false);
         }
 
         public void CaptureHardwareWhitelist()
         {
             _trustedDeviceIds.Clear();
-            try
-            {
-                using (var searcher = new ManagementObjectSearcher("SELECT PNPDeviceID FROM Win32_PnPEntity WHERE Present = True"))
-                using (var collection = searcher.Get())
-                {
-                    foreach (ManagementBaseObject device in collection)
-                    {
-                        try 
-                        {
-                            var id = device.GetPropertyValue("PNPDeviceID")?.ToString();
-                            if (!string.IsNullOrEmpty(id)) _trustedDeviceIds.Add(id);
-                        }
-                        catch { }
-                        finally { device.Dispose(); }
-                    }
-                }
+            try {
+                _trustedDeviceIds = _hardware.GetCurrentPnpDevices();
                 Log($"Global Whitelist: {_trustedDeviceIds.Count} devices monitored.");
             }
             catch (Exception ex) { Log("Global Whitelist error: " + ex.Message); }
@@ -156,20 +165,16 @@ namespace io_lockdown
         public List<string> GetPairedBluetoothDevices()
         {
             var deviceNames = new List<string>();
-            try
-            {
+            try {
                 var client = new BluetoothClient();
                 var devices = client.PairedDevices; 
-                foreach (var d in devices)
-                {
-                    if (!string.IsNullOrEmpty(d.DeviceName))
-                    {
+                foreach (var d in devices) {
+                    if (!string.IsNullOrEmpty(d.DeviceName)) {
                         string status = d.Connected ? "Connected" : "Disconnected";
                         deviceNames.Add($"{d.DeviceName} ({status}) [{d.DeviceAddress}]");
                     }
                 }
-            }
-            catch (Exception ex) { Log("Error listing Bluetooth devices: " + ex.Message); }
+            } catch (Exception ex) { Log("Error listing Bluetooth devices: " + ex.Message); }
             return deviceNames;
         }
 
@@ -182,10 +187,8 @@ namespace io_lockdown
                 Log($"Bluetooth monitor started for address: {targetAddress}.");
                 int failureCount = 0;
                 
-                while (true)
-                {
-                    if (!_isLocked)
-                    {
+                while (true) {
+                    if (!_isLocked) {
                         bool isActuallyConnected = false;
                         try {
                             var devices = client.PairedDevices;
@@ -203,75 +206,24 @@ namespace io_lockdown
                             
                             if (failureCount >= 3) {
                                 Log("Bluetooth device disconnected. Locking screen...");
-                                LockWorkStation();
+                                _hardware.LockWorkStation();
                                 failureCount = 0; 
                             }
                         } else {
                             if (failureCount > 0) Log("Bluetooth device verified as connected.");
                             failureCount = 0;
                         }
-                    }
-                    else
-                    {
+                    } else {
                         failureCount = 0; 
                     }
-                    
                     await Task.Delay(15000); 
                 }
             });
         }
 
-        public void SetNetworkState(bool enable)
-        {
-            if (_violationDetected && enable) return;
-            try
-            {
-                string methodName = enable ? "Enable" : "Disable";
-                using (var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_NetworkAdapter WHERE NetConnectionId != NULL"))
-                using (var collection = searcher.Get())
-                {
-                    foreach (ManagementObject item in collection)
-                    {
-                        try { item.InvokeMethod(methodName, null); } 
-                        catch { }
-                        finally { item.Dispose(); }
-                    }
-                }
-                Log($"Network: {methodName}");
-            }
-            catch (Exception ex) { Log("Network error: " + ex.Message); }
-        }
-
-        public void SetUsbHardwareState(bool enable)
-        {
-            if (_violationDetected && enable) return;
-            try
-            {
-                string action = enable ? "Enable-PnpDevice" : "Disable-PnpDevice";
-                string script = $"Get-PnpDevice -Class 'USB' | {action} -Confirm:$false";
-                ProcessStartInfo psi = new ProcessStartInfo("powershell.exe", $"-NoProfile -WindowStyle Hidden -Command \"{script}\"")
-                {
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                Process.Start(psi)?.WaitForExit();
-                Log($"USB Hardware: {action}");
-            }
-            catch (Exception ex) { Log("USB HW error: " + ex.Message); }
-        }
-
-        public void SetUsbStorageState(bool enable)
-        {
-            if (_violationDetected && enable) return;
-            try
-            {
-                using (RegistryKey? key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\USBSTOR", true))
-                {
-                    if (key != null) key.SetValue("Start", enable ? 3 : 4, RegistryValueKind.DWord);
-                }
-                Log($"USB Storage: {(enable ? "Active" : "Blocked")}");
-            }
-            catch (Exception ex) { Log("USB Storage error: " + ex.Message); }
-        }
+        // Delegated methods for backward compatibility if needed, but they use the hardware abstraction
+        public void SetNetworkState(bool enable) => _hardware.SetNetworkState(enable);
+        public void SetUsbHardwareState(bool enable) => _hardware.SetUsbHardwareState(enable);
+        public void SetUsbStorageState(bool enable) => _hardware.SetUsbStorageState(enable);
     }
 }
