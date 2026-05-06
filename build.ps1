@@ -5,7 +5,7 @@ Write-Host "Iniciando compilação do I/O Lockdown..." -ForegroundColor Cyan
 if (Test-Path "./publish") { Remove-Item -Recurse -Force "./publish" }
 
 # Compila como executável único (Self-Contained) para Windows 64-bit
-dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -o ./publish /p:TargetFramework=net9.0-windows10.0.19041.0
+dotnet publish io-lockdown.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:EnableCompressionInSingleFile=true -o ./publish /p:TargetFramework=net9.0-windows10.0.19041.0
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "`nSucesso! O executável foi gerado na pasta './publish'." -ForegroundColor Green

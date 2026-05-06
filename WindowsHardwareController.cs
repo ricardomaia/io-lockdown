@@ -13,6 +13,13 @@ namespace io_lockdown
 {
     public class WindowsHardwareController : IHardwareController
     {
+        private readonly Action<string>? _log;
+        private const int PsTimeoutMs = 30_000;
+
+        public WindowsHardwareController(Action<string>? log = null) => _log = log;
+
+        private void Log(string message) => _log?.Invoke(message);
+
         [DllImport("user32.dll")]
         private static extern bool LockWorkStationInternal();
 
@@ -27,7 +34,7 @@ namespace io_lockdown
                         Console.Beep(1500, 400);
                         Console.Beep(1000, 400);
                     }
-                } catch { 
+                } catch {
                     try { Console.Beep(); } catch { }
                 }
             });
@@ -43,57 +50,54 @@ namespace io_lockdown
                 string fileName = $"violation_{DateTime.Now:yyyyMMdd_HHmmss}.jpg";
                 var storageFile = await KnownFolders.PicturesLibrary.CreateFileAsync(fileName, CreationCollisionOption.GenerateUniqueName);
                 await capture.CapturePhotoToStorageFileAsync(ImageEncodingProperties.CreateJpeg(), storageFile);
-            } catch { }
+            } catch (Exception ex) { Log($"CapturePhoto error: {ex.Message}"); }
         }
 
         public List<string> GetCurrentPnpDevices()
         {
             var ids = new List<string>();
-            try {
-                using (var searcher = new ManagementObjectSearcher("SELECT PNPDeviceID FROM Win32_PnPEntity WHERE Present = True"))
-                using (var collection = searcher.Get()) {
-                    foreach (ManagementBaseObject device in collection) {
-                        var id = device.GetPropertyValue("PNPDeviceID")?.ToString();
-                        if (!string.IsNullOrEmpty(id)) ids.Add(id);
-                    }
-                }
-            } catch { }
+            using var searcher = new ManagementObjectSearcher("SELECT PNPDeviceID FROM Win32_PnPEntity WHERE Present = True");
+            using var collection = searcher.Get();
+            foreach (ManagementBaseObject device in collection) {
+                var id = device.GetPropertyValue("PNPDeviceID")?.ToString();
+                if (!string.IsNullOrEmpty(id)) ids.Add(id);
+            }
             return ids;
         }
 
         public void SetNetworkState(bool enable)
         {
-            try {
-                string methodName = enable ? "Enable" : "Disable";
-                using (var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_NetworkAdapter WHERE PhysicalAdapter = True AND NetConnectionId != NULL"))
-                using (var collection = searcher.Get()) {
-                    foreach (ManagementObject item in collection) {
-                        try { item.InvokeMethod(methodName, null); } catch { }
-                    }
-                }
-            } catch { }
+            string methodName = enable ? "Enable" : "Disable";
+            using var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_NetworkAdapter WHERE PhysicalAdapter = True AND NetConnectionId != NULL");
+            using var collection = searcher.Get();
+            foreach (ManagementObject item in collection) {
+                try { item.InvokeMethod(methodName, null); }
+                catch (Exception ex) { Log($"SetNetworkState({enable}) failed for adapter: {ex.Message}"); }
+            }
         }
 
         public void SetUsbHardwareState(bool enable)
         {
-            try {
-                string action = enable ? "Enable-PnpDevice" : "Disable-PnpDevice";
-                string script = $"Get-PnpDevice -Class 'USB' | {action} -Confirm:$false";
-                ProcessStartInfo psi = new ProcessStartInfo("powershell.exe", $"-NoProfile -WindowStyle Hidden -Command \"{script}\"") {
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                Process.Start(psi)?.WaitForExit();
-            } catch { }
+            string action = enable ? "Enable-PnpDevice" : "Disable-PnpDevice";
+            string script = $"Get-PnpDevice -Class 'USB' | {action} -Confirm:$false";
+            var psi = new ProcessStartInfo("powershell.exe", $"-NoProfile -WindowStyle Hidden -Command \"{script}\"") {
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            var proc = Process.Start(psi);
+            if (proc != null && !proc.WaitForExit(PsTimeoutMs)) {
+                proc.Kill();
+                Log("SetUsbHardwareState: PowerShell timed out and was killed.");
+            }
         }
 
         public void SetUsbStorageState(bool enable)
         {
-            try {
-                using (RegistryKey? key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\USBSTOR", true)) {
-                    if (key != null) key.SetValue("Start", enable ? 3 : 4, RegistryValueKind.DWord);
-                }
-            } catch { }
+            using RegistryKey? key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\USBSTOR", true);
+            if (key != null)
+                key.SetValue("Start", enable ? 3 : 4, RegistryValueKind.DWord);
+            else
+                Log("SetUsbStorageState: USBSTOR registry key not found.");
         }
     }
 }

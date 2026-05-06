@@ -237,10 +237,14 @@ namespace io_lockdown
             if (m.Msg == WM_DEVICECHANGE)
             {
                 int eventType = m.WParam.ToInt32();
-                
+
                 if (eventType == DBT_DEVICEARRIVAL)
                 {
                     Task.Run(() => CheckNewHardwareIntegrity());
+                }
+                else if (eventType == DBT_DEVICEREMOVECOMPLETE && !_isLocked)
+                {
+                    Task.Run(() => CheckTrustedDeviceRemoval());
                 }
 
                 if (_isLocked && (eventType == DBT_DEVICEARRIVAL || eventType == DBT_DEVICEREMOVECOMPLETE))
@@ -250,27 +254,41 @@ namespace io_lockdown
             }
         }
 
+        private void CheckTrustedDeviceRemoval()
+        {
+            try
+            {
+                // Brief delay so the OS updates the PnP device list before we query it
+                System.Threading.Thread.Sleep(500);
+                var currentSet = new HashSet<string>(_engine.GetCurrentPnpDevices(), StringComparer.OrdinalIgnoreCase);
+
+                foreach (var id in _engine.TrustedDeviceIds.ToList())
+                {
+                    if (!currentSet.Contains(id))
+                    {
+                        _engine.Log($"TRUSTED DEVICE REMOVED: {id}. Locking workstation.");
+                        _engine.SetNetworkState(false);
+                        _engine.SetUsbStorageState(false);
+                        _engine.RequestLock($"TRUSTED DEVICE REMOVED: {id}");
+                        return;
+                    }
+                }
+            }
+            catch (Exception ex) { _engine.Log("Error checking device removal: " + ex.Message); }
+        }
+
         private void CheckNewHardwareIntegrity()
         {
             try
             {
-                using (var searcher = new ManagementObjectSearcher("SELECT PNPDeviceID FROM Win32_PnPEntity WHERE Present = True"))
-                using (var collection = searcher.Get())
+                foreach (var id in _engine.GetCurrentPnpDevices())
                 {
-                    foreach (ManagementBaseObject device in collection)
+                    if (!string.IsNullOrEmpty(id) && !_engine.IsDeviceAuthorized(id))
                     {
-                        try
-                        {
-                            object? val = device.GetPropertyValue("PNPDeviceID");
-                            string id = val?.ToString() ?? "";
-                            if (!string.IsNullOrEmpty(id) && !_engine.IsDeviceAuthorized(id))
-                            {
-                                _engine.Log($"UNAUTHORIZED DEVICE DETECTED: {id}");
-                                _ = _engine.TriggerViolation($"New unauthorized hardware: {id}");
-                                LockdownEngine.LockWorkStation();
-                            }
-                        }
-                        catch { }
+                        _engine.Log($"UNAUTHORIZED DEVICE DETECTED: {id}");
+                        _ = _engine.TriggerViolation($"New unauthorized hardware: {id}");
+                        LockdownEngine.LockWorkStation();
+                        return;
                     }
                 }
             }

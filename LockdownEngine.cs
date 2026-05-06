@@ -1,13 +1,10 @@
 using System.Management;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using Microsoft.Win32;
 using System.IO;
-using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using InTheHand.Net.Sockets;
-using InTheHand.Net.Bluetooth;
 
 namespace io_lockdown
 {
@@ -17,11 +14,14 @@ namespace io_lockdown
         private bool _violationDetected = false;
         private bool _isLocked = false;
         private string _logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "lockdown.log");
-        private string _violationDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "violations");
         private ManagementEventWatcher? _usbRemovalWatcher;
         private ManagementEventWatcher? _usbArrivalWatcher;
         private IHardwareController _hardware;
+        private CancellationTokenSource? _bluetoothCts;
         private static IHardwareController _staticHardware = new WindowsHardwareController();
+
+        private const int BluetoothPollIntervalMs = 15_000;
+        private const int BluetoothFailureThreshold = 3;
 
         public static void LockWorkStation() => _staticHardware.LockWorkStation();
 
@@ -38,13 +38,16 @@ namespace io_lockdown
 
         public LockdownEngine(IHardwareController? hardware = null)
         {
-            _hardware = hardware ?? new WindowsHardwareController();
+            _hardware = hardware ?? new WindowsHardwareController(Log);
             try {
-                if (!Directory.Exists(_violationDir)) Directory.CreateDirectory(_violationDir);
+                string violationDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "violations");
+                if (!Directory.Exists(violationDir)) Directory.CreateDirectory(violationDir);
                 ResetSystemToSafeState();
                 CaptureHardwareWhitelist();
                 StartHardwareMonitors();
-            } catch { }
+            } catch (Exception ex) {
+                Log($"INIT ERROR: {ex.Message}");
+            }
         }
 
         public void ResetSystemToSafeState()
@@ -52,10 +55,10 @@ namespace io_lockdown
             Log("Executing Fail-Safe: Restoring hardware and network states.");
             _violationDetected = false;
             _isLocked = false;
-            
-            _hardware.SetUsbStorageState(true);
-            _hardware.SetNetworkState(true);
-            _hardware.SetUsbHardwareState(true);
+
+            try { _hardware.SetUsbStorageState(true); } catch (Exception ex) { Log($"SetUsbStorageState failed: {ex.Message}"); }
+            try { _hardware.SetNetworkState(true); } catch (Exception ex) { Log($"SetNetworkState failed: {ex.Message}"); }
+            try { _hardware.SetUsbHardwareState(true); } catch (Exception ex) { Log($"SetUsbHardwareState failed: {ex.Message}"); }
         }
 
         public void StartHardwareMonitors()
@@ -78,7 +81,7 @@ namespace io_lockdown
                         string id = instance["PNPDeviceID"]?.ToString() ?? "Unknown ID";
                         string name = instance["Name"]?.ToString() ?? "Unknown Name";
                         Log($"EVENT: Hardware Arrival detected: {name} ({id})");
-                        
+
                         if (_isLocked) {
                             _ = TriggerViolation($"Hardware connection detected during lockdown: {id}");
                         } else {
@@ -108,13 +111,13 @@ namespace io_lockdown
                         string id = instance["PNPDeviceID"]?.ToString() ?? "Unknown ID";
                         string name = instance["Name"]?.ToString() ?? "Unknown Name";
                         Log($"EVENT: Hardware Removal detected: {name} ({id})");
-                        
+
                         if (_isLocked) {
                             _ = TriggerViolation($"Hardware removal detected during lockdown: {id}");
                         } else {
                             if (IsDeviceAuthorized(id)) {
                                 RequestLock($"TRUSTED DEVICE REMOVED: {id}");
-                                _hardware.PlayAlarm();
+                                try { _hardware.PlayAlarm(); } catch (Exception ex) { Log($"PlayAlarm failed: {ex.Message}"); }
                             }
                         }
                     } catch (Exception ex) { Log("Error processing Removal event: " + ex.Message); }
@@ -129,6 +132,8 @@ namespace io_lockdown
             if (string.IsNullOrEmpty(pnpDeviceId)) return true;
             return _trustedDeviceIds.Contains(pnpDeviceId);
         }
+
+        public List<string> GetCurrentPnpDevices() => _hardware.GetCurrentPnpDevices();
 
         public void Log(string message)
         {
@@ -145,11 +150,11 @@ namespace io_lockdown
             if (_violationDetected) return;
             _violationDetected = true;
             Log($"VIOLATION DETECTED: {reason}. Initiating Lockdown.");
-            
-            await _hardware.CapturePhoto();
-            _hardware.PlayAlarm();
-            _hardware.SetNetworkState(false);
-            _hardware.SetUsbHardwareState(false);
+
+            try { await _hardware.CapturePhoto(); } catch (Exception ex) { Log($"CapturePhoto failed: {ex.Message}"); }
+            try { _hardware.PlayAlarm(); } catch (Exception ex) { Log($"PlayAlarm failed: {ex.Message}"); }
+            try { _hardware.SetNetworkState(false); } catch (Exception ex) { Log($"SetNetworkState failed: {ex.Message}"); }
+            try { _hardware.SetUsbHardwareState(false); } catch (Exception ex) { Log($"SetUsbHardwareState failed: {ex.Message}"); }
         }
 
         public void CaptureHardwareWhitelist()
@@ -167,7 +172,7 @@ namespace io_lockdown
             var deviceNames = new List<string>();
             try {
                 var client = new BluetoothClient();
-                var devices = client.PairedDevices; 
+                var devices = client.PairedDevices;
                 foreach (var d in devices) {
                     if (!string.IsNullOrEmpty(d.DeviceName)) {
                         string status = d.Connected ? "Connected" : "Disconnected";
@@ -182,12 +187,16 @@ namespace io_lockdown
         {
             if (string.IsNullOrEmpty(targetAddress)) return;
 
+            _bluetoothCts?.Cancel();
+            _bluetoothCts = new CancellationTokenSource();
+            var token = _bluetoothCts.Token;
+
             Task.Run(async () => {
-                var client = new BluetoothClient();
+                using var client = new BluetoothClient();
                 Log($"Bluetooth monitor started for address: {targetAddress}.");
                 int failureCount = 0;
-                
-                while (true) {
+
+                while (!token.IsCancellationRequested) {
                     if (!_isLocked) {
                         bool isActuallyConnected = false;
                         try {
@@ -198,30 +207,31 @@ namespace io_lockdown
                                     break;
                                 }
                             }
-                        } catch { }
+                        } catch (Exception ex) { Log($"Bluetooth poll error: {ex.Message}"); }
 
                         if (!isActuallyConnected) {
                             failureCount++;
-                            Log($"Bluetooth connection missing ({failureCount}/3).");
-                            
-                            if (failureCount >= 3) {
+                            Log($"Bluetooth connection missing ({failureCount}/{BluetoothFailureThreshold}).");
+                            if (failureCount >= BluetoothFailureThreshold) {
                                 Log("Bluetooth device disconnected. Locking screen...");
                                 _hardware.LockWorkStation();
-                                failureCount = 0; 
+                                failureCount = 0;
                             }
                         } else {
                             if (failureCount > 0) Log("Bluetooth device verified as connected.");
                             failureCount = 0;
                         }
                     } else {
-                        failureCount = 0; 
+                        failureCount = 0;
                     }
-                    await Task.Delay(15000); 
+
+                    try { await Task.Delay(BluetoothPollIntervalMs, token); }
+                    catch (OperationCanceledException) { break; }
                 }
-            });
+                Log("Bluetooth monitor stopped.");
+            }, token);
         }
 
-        // Delegated methods for backward compatibility if needed, but they use the hardware abstraction
         public void SetNetworkState(bool enable) => _hardware.SetNetworkState(enable);
         public void SetUsbHardwareState(bool enable) => _hardware.SetUsbHardwareState(enable);
         public void SetUsbStorageState(bool enable) => _hardware.SetUsbStorageState(enable);
