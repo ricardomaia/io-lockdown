@@ -159,9 +159,8 @@ namespace io_lockdown
 
         public void CaptureHardwareWhitelist()
         {
-            _trustedDeviceIds.Clear();
             try {
-                _trustedDeviceIds = _hardware.GetCurrentPnpDevices();
+                _trustedDeviceIds = new List<string>(_hardware.GetCurrentPnpDevices());
                 Log($"Global Whitelist: {_trustedDeviceIds.Count} devices monitored.");
             }
             catch (Exception ex) { Log("Global Whitelist error: " + ex.Message); }
