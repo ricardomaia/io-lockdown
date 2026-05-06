@@ -20,10 +20,10 @@ namespace io_lockdown
 
         private void Log(string message) => _log?.Invoke(message);
 
-        [DllImport("user32.dll")]
-        private static extern bool LockWorkStationInternal();
+        [DllImport("user32.dll", EntryPoint = "LockWorkStation", SetLastError = true)]
+        private static extern bool LockWorkStationNative();
 
-        public bool LockWorkStation() => LockWorkStationInternal();
+        public bool LockWorkStation() => LockWorkStationNative();
 
         public void PlayAlarm()
         {
