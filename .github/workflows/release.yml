@@ -1,11 +1,14 @@
-name: Build and Test
+name: Release
 
 on:
-  pull_request:
+  push:
     branches: [ "release/**" ]
 
+permissions:
+  contents: write
+
 jobs:
-  build:
+  release:
     runs-on: windows-latest
 
     steps:
@@ -41,8 +44,17 @@ jobs:
       run: |
         wix build Package.wxs -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext -o "IOLockdown_Installer.msi"
 
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
+    - name: Extract version
+      id: version
+      shell: pwsh
+      run: |
+        $version = ([xml](Get-Content io-lockdown.csproj)).Project.PropertyGroup.Version
+        echo "version=$version" >> $env:GITHUB_OUTPUT
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
       with:
-        name: IOLockdown-MSI
-        path: IOLockdown_Installer.msi
+        tag_name: v${{ steps.version.outputs.version }}
+        name: I/O Lockdown v${{ steps.version.outputs.version }}
+        files: IOLockdown_Installer.msi
+        generate_release_notes: true
