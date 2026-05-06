@@ -1,8 +1,14 @@
 # I/O Lockdown
 
-[![Deploy GitHub Pages](https://github.com/ricardomaia/io-lockdown/actions/workflows/pages.yml/badge.svg)](https://github.com/ricardomaia/io-lockdown/actions/workflows/pages.yml) [![Build and Package](https://github.com/ricardomaia/io-lockdown/actions/workflows/build.yml/badge.svg)](https://github.com/ricardomaia/io-lockdown/actions/workflows/build.yml)
+[![Deploy GitHub Pages](https://github.com/ricardomaia/io-lockdown/actions/workflows/pages.yml/badge.svg)](https://github.com/ricardomaia/io-lockdown/actions/workflows/pages.yml) [![Build and Test](https://github.com/ricardomaia/io-lockdown/actions/workflows/build.yml/badge.svg)](https://github.com/ricardomaia/io-lockdown/actions/workflows/build.yml) [![Release](https://github.com/ricardomaia/io-lockdown/actions/workflows/release.yml/badge.svg)](https://github.com/ricardomaia/io-lockdown/actions/workflows/release.yml)
 
 I/O Lockdown is a Windows endpoint security tool designed to protect workstations from physical peripheral attacks and data exfiltration while the system is locked or unattended.
+
+## Download
+
+The latest installer is available on the [GitHub Releases](https://github.com/ricardomaia/io-lockdown/releases/latest) page.
+
+Download `IOLockdown_Installer.msi` and run it with administrator privileges. The installer registers the background service and places the tray icon in the startup programs.
 
 ## Defense Objectives & Strategy
 
@@ -16,17 +22,17 @@ Upon detecting a session lock (`Win+L`), the system executes:
 
 ### 2. Anti-Tampering Monitoring (Hardware)
 While active, the application monitors the PnP (Plug and Play) bus. If any physical change occurs (connection of a new device or removal of an existing one):
-- **Violation Detection:** Instantly identifies changes via `WM_DEVICECHANGE` events.
+- **Violation Detection:** Instantly identifies changes via `WM_DEVICECHANGE` events and WMI watchers.
 - **Visual Evidence:** Automatically captures a photo of the intruder using the available webcam.
 - **Total Lockdown:** Disables all USB controllers (Hubs and Root Controllers) via PowerShell (`Disable-PnpDevice`).
-- **Security Persistence:** The "Violation Detected" state prevents automatic re-activation of interfaces upon unlocking.
+- **Security Persistence:** The "Violation Detected" state prevents automatic re-activation of interfaces upon unlocking — requires a manual reset via the audit console.
 
 ### 3. Smart Lock (Bluetooth Proximity)
-The system can monitor a paired Bluetooth device (e.g., your smartphone). If the device goes out of range, Windows is automatically locked.
+The system can monitor a paired Bluetooth device (e.g., your smartphone). If the device goes out of range for three consecutive checks, Windows is automatically locked.
 
 ## Operation Modes
 - **Audit Interface:** A system tray application for real-time log monitoring.
-- **Service Mode:** Can run as a Windows Service (`--service`) for system-level protection without requiring user login.
+- **Service Mode:** Runs as a Windows Service (`IOLockdownService`) for system-level protection, started automatically on boot without requiring user login.
 
 ## Build Instructions
 
@@ -38,17 +44,35 @@ The system can monitor a paired Bluetooth device (e.g., your smartphone). If the
 ### Compilation Steps
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/rsmaia/io-lockdown.git
+   git clone https://github.com/ricardomaia/io-lockdown.git
    cd io-lockdown
    ```
-2. **Build the executable:**
+2. **Run tests:**
+   ```powershell
+   dotnet test io-lockdown.Tests/io-lockdown.Tests.csproj -c Release
+   ```
+3. **Build the executable:**
    ```powershell
    ./build.ps1
    ```
-3. **Generate the MSI installer:**
+4. **Generate the MSI installer:**
    ```powershell
    ./make-msi.ps1
    ```
+
+## Release Process
+
+Releases are published automatically via GitHub Actions:
+
+1. Create a branch from `main` named `release/vX.Y.Z`.
+2. Open a Pull Request targeting that branch — the **Build and Test** workflow runs tests and builds the MSI as a validation artifact.
+3. Merge the PR — the **Release** workflow triggers automatically, builds the MSI, creates a Git tag `vX.Y.Z` (version read from `io-lockdown.csproj`), and publishes a GitHub Release with the MSI attached.
+
+To publish manually (e.g., for hotfixes):
+```powershell
+./make-msi.ps1
+gh release create vX.Y.Z IOLockdown_Installer.msi --title "I/O Lockdown vX.Y.Z" --generate-notes
+```
 
 ## Windows 11 VirtualBox Test VM
 
@@ -57,6 +81,8 @@ This repository can be tested in an isolated Windows 11 VM using the local ISO a
 ```text
 ISO\Win11_25H2_EnglishInternational_x64_v2.iso
 ```
+
+> **Warning:** Never run the compiled binary or installer on the host machine. Always test inside the VM — the application disables network adapters and USB ports, which would interrupt host connectivity immediately.
 
 ### Host Prerequisites
 - **Oracle VirtualBox 7.2+**
@@ -136,7 +162,7 @@ For headless installation or CI-like validation:
 ## System Requirements
 - **OS:** Windows 10/11
 - **Privileges:** Run as Administrator.
-- **Framework:** .NET 9.0
+- **Framework:** .NET 9.0 (bundled in the installer — no separate installation required)
 
 ## Technologies
 - **C# / .NET 9.0:** Core logic and UI.
@@ -146,4 +172,4 @@ For headless installation or CI-like validation:
 - **UWP MediaCapture:** Violation evidence photography.
 
 ---
-*Warning: Use with caution. Accidental disconnection of your trusted keyboard during lockdown will result in USB port shutdown, requiring a physical system restart.*
+*Warning: Accidental disconnection of a trusted device while the screen is unlocked will lock the workstation and disable network access. The "Violation Detected" state requires a manual reset via the audit console before network and USB storage are restored.*
